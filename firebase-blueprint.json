@@ -1,0 +1,144 @@
+{
+  "entities": {
+    "users": {
+      "title": "User Profile",
+      "description": "User accounts with Google Auth and unique custom handles",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "username": { "type": "string" },
+        "usernameLower": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string" }
+      },
+      "required": ["uid", "username", "usernameLower"]
+    },
+    "usernames": {
+      "title": "Username Registry",
+      "description": "Mapping from lowercase username to user id to guarantee uniqueness",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string" }
+      },
+      "required": ["uid", "username"]
+    },
+    "characters": {
+      "title": "RPG Characters",
+      "description": "RPG characters created by users",
+      "properties": {
+        "userId": { "type": "string" },
+        "system": { "type": "string" },
+        "name": { "type": "string" },
+        "playerName": { "type": "string" },
+        "race": { "type": "string" },
+        "origin": { "type": "string" },
+        "divinity": { "type": "string" },
+        "totalLevel": { "type": "number" },
+        "alignment": { "type": "string" },
+        "size": { "type": "string" },
+        "speed": { "type": "string" },
+        "age": { "type": "number" },
+        "class1": { "type": "string" },
+        "class1Level": { "type": "number" },
+        "class2": { "type": "string" },
+        "class2Level": { "type": "number" },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["userId", "name", "system"]
+    },
+    "presence": {
+      "title": "Online Presence",
+      "description": "Real-time user presence tracking and heartbeat",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string" },
+        "lastSeen": { "type": "timestamp" },
+        "isOnline": { "type": "boolean" }
+      },
+      "required": ["uid", "username", "lastSeen"]
+    },
+    "uploadedFiles": {
+      "title": "Uploaded Text Files",
+      "description": "Full text files stored in Firebase for Sistemas, Mundos, and Contos&Personagens with identification Nome_do_Campo:_Nome_do_Arquivo",
+      "properties": {
+        "identifier": { "type": "string" },
+        "category": { "type": "string", "enum": ["Sistemas", "Mundos", "Contos&Personagens"] },
+        "fileName": { "type": "string" },
+        "content": { "type": "string" },
+        "fileSize": { "type": "number" },
+        "charCount": { "type": "number" },
+        "lineCount": { "type": "number" },
+        "uploadedBy": { "type": "string" },
+        "uploadedByName": { "type": "string" },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["identifier", "category", "fileName", "content"]
+    },
+    "campaigns": {
+      "title": "RPG Campaigns",
+      "description": "RPG Campaigns configured with system rules version, attached system/world/lore files, and bound player character",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "system": { "type": "string" },
+        "systemVersion": { "type": "string" },
+        "systemFileId": { "type": "string" },
+        "systemFileName": { "type": "string" },
+        "systemFileIdentifier": { "type": "string" },
+        "worldFileId": { "type": "string" },
+        "worldFileName": { "type": "string" },
+        "worldFileIdentifier": { "type": "string" },
+        "loreFileId": { "type": "string" },
+        "loreFileName": { "type": "string" },
+        "loreFileIdentifier": { "type": "string" },
+        "characterId": { "type": "string" },
+        "characterName": { "type": "string" },
+        "characterSystem": { "type": "string" },
+        "characterData": { "type": "object" },
+        "createdBy": { "type": "string" },
+        "createdByName": { "type": "string" },
+        "status": { "type": "string" },
+        "narratorRulesMemory": { "type": "array" },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["name", "system", "systemVersion", "characterId", "createdBy"]
+    },
+    "campaign_messages": {
+      "title": "Campaign Session Messages",
+      "description": "Real-time game session log with chat, speech, actions, rolls, combat attacks, item usage and system events",
+      "properties": {
+        "id": { "type": "string" },
+        "campaignId": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderRole": { "type": "string", "enum": ["player", "gm", "system", "narrator"] },
+        "characterName": { "type": "string" },
+        "type": { "type": "string", "enum": ["speech", "action", "thought", "item", "system", "roll", "narrative", "combat"] },
+        "content": { "type": "string" },
+        "metadata": { "type": "object" },
+        "createdAt": { "type": "timestamp" }
+      },
+      "required": ["campaignId", "senderName", "content", "type"]
+    }
+  },
+  "firestore": {
+    "/uploadedFiles/{fileId}": {
+      "schema": { "$ref": "#/entities/uploadedFiles" },
+      "description": "Loaded .txt files for Sistemas, Mundos, and Contos&Personagens"
+    },
+    "/campaigns/{campaignId}": {
+      "schema": { "$ref": "#/entities/campaigns" },
+      "description": "RPG campaigns with attached files and bound player character"
+    },
+    "/campaign_messages/{messageId}": {
+      "schema": { "$ref": "#/entities/campaign_messages" },
+      "description": "Session chat messages and rolls"
+    }
+  }
+}

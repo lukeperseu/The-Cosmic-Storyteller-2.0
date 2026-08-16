@@ -1,0 +1,6 @@
+{
+  "name": "The Cosmic Storyteller",
+  "description": "Menu inicial, gerenciamento de fichas de personagens, arquivos de Sistemas/Mundos/Contos, criação de campanhas e Tela de Jogo com chat em tempo real, sidebars retráteis, HUD de PV/PM e rolador de dados no Firebase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
