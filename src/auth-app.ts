@@ -8,6 +8,7 @@ import {
   onAuthStateChanged,
   saveCharacter,
   getUserCharacters,
+  getCharacterById,
   UserProfileData,
   CharacterClass,
   CharacterData,
@@ -32,10 +33,21 @@ import {
   SessionMessage
 } from './firebase';
 
+// Handle unhandled rejection for Firebase Auth internal assertion race conditions
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason;
+  const reasonStr = typeof reason === 'string' ? reason : (reason?.message || reason?.stack || '');
+  if (reasonStr.includes('Pending promise was never set') || reasonStr.includes('cancelled-popup-request')) {
+    event.preventDefault();
+    console.warn("Handled Firebase Auth internal popup assertion gracefully.");
+  }
+});
+
 let currentGoogleUser: any = null;
 let currentUserProfile: UserProfileData | null = null;
 let liveCheckDebounceTimer: any = null;
 let isCurrentUsernameValid = false;
+let isLoginRunning = false;
 
 // Declare on window so inline onclick handlers in index.html work seamlessly
 declare global {
@@ -176,6 +188,7 @@ declare global {
     copyCurrentTabContent: () => void;
     toggleGameRightSidebar: () => void;
     closeGameRightSidebarMobile: () => void;
+    toggleSessionMoreToolsMenu: (forceState?: boolean) => void;
     updateGameHUD: () => void;
     modifyCharacterStat: (stat: 'pv' | 'pm', delta: number) => Promise<void>;
     promptCustomStatChange: (stat: 'pv' | 'pm') => void;
@@ -314,8 +327,26 @@ function updateAppUIWithProfile(profile: UserProfileData | null, gUser: any | nu
  * Handle Google Login
  */
 window.handleGoogleLogin = async function() {
+  if (isLoginRunning) {
+    if (window.showToast) window.showToast("Autenticação com Google já está em andamento...", "info");
+    return;
+  }
+
+  const loginBtn = document.getElementById('account-login-google-btn') as HTMLButtonElement | null;
+  const originalBtnHTML = loginBtn ? loginBtn.innerHTML : '';
+
+  if (loginBtn) {
+    loginBtn.disabled = true;
+    loginBtn.classList.add('opacity-70', 'cursor-wait');
+    loginBtn.innerHTML = `
+      <span class="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></span>
+      <span>Conectando com o Google...</span>
+    `;
+  }
+
+  isLoginRunning = true;
   try {
-    if (window.showToast) window.showToast("Iniciando Login do Google...", "info");
+    if (window.showToast) window.showToast("Iniciando autenticação com o Google...", "info");
     const user = await loginWithGoogle();
     currentGoogleUser = user;
 
@@ -325,15 +356,43 @@ window.handleGoogleLogin = async function() {
     if (existingProfile && existingProfile.username) {
       currentUserProfile = existingProfile;
       updateAppUIWithProfile(existingProfile, user);
-      if (window.showToast) window.showToast(`Bem-vindo de volta, ${existingProfile.username}! 🚀`);
+      if (window.showToast) window.showToast(`Bem-vindo de volta, ${existingProfile.username}! 🚀`, "success");
     } else {
       // User doesn't have a username yet! Force open username modal
       if (window.showToast) window.showToast("Google Auth concluído! Agora escolha seu nome único.", "success");
       window.openUsernameModal(false);
     }
   } catch (error: any) {
-    console.error("Google Login failed:", error);
-    if (window.showToast) window.showToast("Erro ao autenticar com o Google. Tente novamente.", "error");
+    const errorMsg = error?.message || '';
+
+    if (errorMsg === 'POPUP_BLOCKED') {
+      if (window.showToast) {
+        window.showToast("⚠️ O navegador bloqueou a janela pop-up do Google. Permita pop-ups ou abra em uma nova aba.", "error");
+      }
+      const statusBadge = document.getElementById('account-auth-status-badge');
+      if (statusBadge) {
+        statusBadge.innerHTML = `
+          <div class="text-amber-300 text-xs space-y-1">
+            <p>⚠️ <strong>Pop-up bloqueado pelo navegador.</strong></p>
+            <p class="text-[11px] text-slate-300">Permita pop-ups para este site ou <a href="${window.location.href}" target="_blank" class="underline text-cyan-300 font-bold hover:text-white">abra em nova aba</a>.</p>
+          </div>
+        `;
+      }
+    } else if (errorMsg === 'POPUP_CLOSED') {
+      if (window.showToast) window.showToast("Janela de login fechada antes da conclusão.", "info");
+    } else if (errorMsg.includes('já está aberta') || errorMsg.includes('substituída')) {
+      if (window.showToast) window.showToast(errorMsg, "info");
+    } else {
+      console.error("Google Login failed:", error);
+      if (window.showToast) window.showToast(`Erro na autenticação: ${errorMsg || 'Tente novamente.'}`, "error");
+    }
+  } finally {
+    isLoginRunning = false;
+    if (loginBtn) {
+      loginBtn.disabled = false;
+      loginBtn.classList.remove('opacity-70', 'cursor-wait');
+      loginBtn.innerHTML = originalBtnHTML;
+    }
   }
 };
 
@@ -5598,15 +5657,30 @@ window.enterGameSession = async function(campaignId?: string) {
   activeGameCampaign = campaign;
   window.activeGameCampaign = campaign;
 
-  // 2. Locate Character Data
+  // 2. Locate Character Data (Fetch fresh from Firestore if ID available)
   let char: any = null;
   const loadedChars: any[] = (window as any).loadedCharacters || (window as any).cachedCharacters || [];
   
   if (campaign.characterId) {
+    try {
+      const freshChar = await getCharacterById(campaign.characterId);
+      if (freshChar) {
+        char = freshChar;
+        const existingIdx = loadedChars.findIndex(c => c.id === freshChar.id);
+        if (existingIdx >= 0) loadedChars[existingIdx] = freshChar;
+        else loadedChars.unshift(freshChar);
+        (window as any).loadedCharacters = loadedChars;
+      }
+    } catch (err) {
+      console.warn("Could not fetch fresh character by ID, falling back to cache:", err);
+    }
+  }
+
+  if (!char && campaign.characterId) {
     char = loadedChars.find(c => c.id === campaign.characterId);
   }
 
-  if (!char && campaign.characterData) {
+  if (!char && campaign.characterData && campaign.characterData.name) {
     char = campaign.characterData;
   }
 
@@ -5634,7 +5708,7 @@ window.enterGameSession = async function(campaignId?: string) {
       pvMax: 28,
       pmAtual: 9,
       pmMax: 9,
-      defense: 18,
+      defenseBase: 10,
       attributes: [
         { id: 'FOR', name: 'Força', value: 3, mod: 3 },
         { id: 'DES', name: 'Destreza', value: 2, mod: 2 },
@@ -5644,26 +5718,34 @@ window.enterGameSession = async function(campaignId?: string) {
         { id: 'CAR', name: 'Carisma', value: 0, mod: 0 }
       ],
       attacks: [
-        { weapon: 'Espada Longa Magistral', atkBonus: 6, damage: '1d8+4', crit: '19-20/x2', type: 'Corte', range: 'Corpo a corpo' },
-        { weapon: 'Arco Curto Reforçado', atkBonus: 5, damage: '1d6+2', crit: 'x3', type: 'Perfuração', range: 'Médio (30m)' },
-        { weapon: 'Adaga Oculta', atkBonus: 5, damage: '1d4+3', crit: '19-20/x2', type: 'Perfuração', range: 'Curto (9m)' }
-      ],
-      armors: [
-        { name: 'Brunea de Aço', defense: 5, penalty: 2, type: 'Pesada', equipped: true },
-        { name: 'Escudo Leve Reforçado', defense: 1, penalty: 1, type: 'Escudo', equipped: true }
+        { name: 'Espada Longa Magistral', weapon: 'Espada Longa Magistral', atkBonus: 6, damage: '1d8+4', crit: '19-20/x2', damageType: 'Corte', range: 'Corpo a corpo' },
+        { name: 'Arco Curto Reforçado', weapon: 'Arco Curto Reforçado', atkBonus: 5, damage: '1d6+2', crit: 'x3', damageType: 'Perfuração', range: 'Médio (30m)' },
+        { name: 'Adaga Oculta', weapon: 'Adaga Oculta', atkBonus: 5, damage: '1d4+3', crit: '19-20/x2', damageType: 'Perfuração', range: 'Curto (9m)' }
       ],
       inventory: [
         { name: 'Poção de Cura Menor (1d8+2 PV)', quantity: 3, weight: 0.5, category: 'Consumível', notes: 'Restaura 1d8+2 pontos de vida' },
         { name: 'Elixir de Mana Concentrado (3 PM)', quantity: 2, weight: 0.5, category: 'Consumível', notes: 'Recupera 3 pontos de mana' },
         { name: 'Bálsamo Restaurador', quantity: 2, weight: 0.5, category: 'Consumível', notes: 'Cura ferimentos e estanca sangramentos' },
+        { name: 'Brunea de Aço', quantity: 1, weight: 15, category: 'Armadura', tag: 'Armadura', defenseBonus: 5, armorPenalty: 2, isEquipped: true },
+        { name: 'Escudo Leve Reforçado', quantity: 1, weight: 2, category: 'Escudo', tag: 'Escudo', defenseBonus: 1, armorPenalty: 1, isEquipped: true },
         { name: 'Rações de Viagem (7 dias)', quantity: 7, weight: 3.5, category: 'Consumível', notes: 'Alimento nutritivo' },
         { name: 'Tochas de Piche', quantity: 4, weight: 2.0, category: 'Consumível', notes: 'Ilumina 6m por 1 hora' },
         { name: 'Corda de Seda (15m)', quantity: 1, weight: 1.5, category: 'Geral', notes: 'Resistente e leve' },
         { name: 'Mochila de Aventureiro', quantity: 1, weight: 1.0, category: 'Geral', notes: 'Compartimentos reforçados' }
       ],
-      tibares: 145,
+      money: 145,
+      currencyName: 'T$ (Tibares)',
       background: 'Nascido nos bairros periféricos de Valkaria, Lorian serviu na Guarda Urbana por 5 anos antes de atender ao chamado dos deuses para defender o continente contra as ameaças de além-mar.',
-      appearance: 'Alto, cabelos castanhos curtos, olhos castanhos atentos, cicatriz na bochecha esquerda proveniente de um confronto com bandidos nos esgotos.'
+      eyes: 'Castanhos atentos',
+      skin: 'Clara com marcas de batalha',
+      hair: 'Castanho escuro curto',
+      appearanceOther: 'Cicatriz na bochecha esquerda proveniente de um confronto com bandidos nos esgotos de Valkaria.',
+      personality: 'Honrado, leal aos companheiros e defensor inflexível dos indefesos.',
+      genderIdentity: 'Masculino cisgênero',
+      sexualOrientation: 'Heterossexual',
+      activism: 'Proteção de refugiados e órfãos de guerra',
+      prejudices: 'Desconfiança contra cultistas da Tormenta e necromantes',
+      likesOther: 'Aprecia uma boa cerveja anã e canções de taverna'
     };
   }
 
@@ -5692,14 +5774,36 @@ window.enterGameSession = async function(campaignId?: string) {
   if (mainFooter) mainFooter.classList.add('hidden');
   if (gameScreen) gameScreen.classList.remove('hidden');
 
-  // 4. Update Header Badges
+  // Lock body and app root to viewport height for desktop independent scroll columns
+  document.body.classList.add('overflow-hidden', 'h-screen');
+  const appRoot = document.getElementById('app-root-container');
+  if (appRoot) {
+    appRoot.classList.add('h-screen', 'max-h-screen', 'overflow-hidden');
+    appRoot.classList.remove('min-h-screen');
+  }
+
+  // 4. Update Header Badges and Sheet Name
   const titleEl = document.getElementById('game-session-title');
   const sysEl = document.getElementById('game-session-system');
   const charBadge = document.getElementById('game-char-name-badge');
+  const sheetNameEl = document.getElementById('game-sheet-char-name');
+  const sheetClassEl = document.getElementById('game-sheet-char-class');
+
+  let classesText = 'Aventureiro 1';
+  if (char.classes && Array.isArray(char.classes) && char.classes.length > 0) {
+    const valid = char.classes.filter((c: any) => c.name && c.name.trim());
+    if (valid.length > 0) {
+      classesText = valid.map((c: any) => `${c.name} ${c.level || 1}`).join(' / ');
+    }
+  } else if (char.class1) {
+    classesText = char.class2 ? `${char.class1} ${char.class1Level || 1} / ${char.class2} ${char.class2Level || 1}` : `${char.class1} ${char.totalLevel || 1}`;
+  }
 
   if (titleEl) titleEl.innerText = campaign.name || 'Sessão Ativa';
   if (sysEl) sysEl.innerText = `${campaign.system || 'Tormenta20'} ${campaign.systemVersion ? `(${campaign.systemVersion})` : ''}`;
   if (charBadge) charBadge.innerText = char.name || 'Personagem';
+  if (sheetNameEl) sheetNameEl.innerText = char.name || 'Sem Nome';
+  if (sheetClassEl) sheetClassEl.innerText = `${char.race || 'Humano'} • ${classesText}`;
 
   // 5. Render Left Character Sheet Tab (Default to 'cabecalho')
   window.setGameSheetTab('cabecalho');
@@ -5755,6 +5859,14 @@ window.exitGameSession = function() {
   if (mainHub) mainHub.classList.remove('hidden');
   if (mainFooter) mainFooter.classList.remove('hidden');
 
+  // Restore normal body & container scrolling
+  document.body.classList.remove('overflow-hidden', 'h-screen');
+  const appRoot = document.getElementById('app-root-container');
+  if (appRoot) {
+    appRoot.classList.remove('h-screen', 'max-h-screen', 'overflow-hidden');
+    appRoot.classList.add('min-h-screen');
+  }
+
   if ((window as any).lucide) {
     (window as any).lucide.createIcons();
   }
@@ -5804,16 +5916,16 @@ window.setGameSheetTab = function(tabId: string) {
   // Update tab button active states
   const tabButtons = document.querySelectorAll('.game-sheet-tab-btn');
   tabButtons.forEach(btn => {
-    const btnTab = btn.getAttribute('data-tab');
-    if (btnTab === tabId) {
-      btn.className = 'game-sheet-tab-btn px-2.5 py-1 rounded-lg text-xs font-bold font-rajdhani whitespace-nowrap transition-all shadow-sm bg-indigo-900/80 text-white border border-indigo-400/60 ring-1 ring-indigo-400/30';
+    const btnId = btn.id || '';
+    if (btnId === `tab-btn-${tabId}`) {
+      btn.className = 'game-sheet-tab-btn active px-2.5 py-1 rounded-md text-xs font-rajdhani font-bold whitespace-nowrap transition-all bg-purple-600 text-white shadow-sm flex items-center space-x-1';
     } else {
-      btn.className = 'game-sheet-tab-btn px-2.5 py-1 rounded-lg text-xs font-bold font-rajdhani whitespace-nowrap transition-all shadow-sm bg-[#121629] text-indigo-200/70 hover:text-white hover:bg-indigo-950/70 border border-indigo-500/20';
+      btn.className = 'game-sheet-tab-btn px-2.5 py-1 rounded-md text-xs font-rajdhani font-bold whitespace-nowrap transition-all bg-purple-950/50 text-slate-300 hover:text-white hover:bg-purple-900/60 border border-purple-500/20 flex items-center space-x-1';
     }
   });
 
   const tabTitleEl = document.getElementById('game-sheet-tab-title');
-  const contentEl = document.getElementById('game-sheet-content');
+  const contentEl = document.getElementById('game-sheet-tab-display') || document.getElementById('game-sheet-content');
   if (!contentEl) return;
 
   const char = activeGameCharacter || {};
@@ -5879,15 +5991,283 @@ window.setGameSheetTab = function(tabId: string) {
 };
 
 /**
+ * Normalizes all attacks and equipped weapons from the character to prevent undefined stats
+ */
+function getFormattedAttackList(char: any): Array<{
+  id: string;
+  name: string;
+  weapon: string;
+  atkBonus: number;
+  atkBonusStr: string;
+  damage: string;
+  crit: string;
+  damageType: string;
+  range: string;
+}> {
+  if (!char) return [];
+  const list: any[] = [];
+  const rawAttacks = Array.isArray(char.attacks) ? char.attacks : [];
+  const rawInventory = Array.isArray(char.inventory) ? char.inventory : [];
+
+  const totalLevel = char.totalLevel || 1;
+  const halfLevel = Math.floor(totalLevel / 2);
+  const attrs = Array.isArray(char.attributes) ? char.attributes : [];
+  const skills = Array.isArray(char.skills) ? char.skills : [];
+
+  const getAttrVal = (attrId: string) => {
+    if (!attrId) return 0;
+    const found = attrs.find((a: any) => (a.id || '').toUpperCase() === attrId.toUpperCase());
+    if (!found) return 0;
+    if (Array.isArray(found.values)) {
+      return found.values.reduce((sum: number, v: number) => sum + (parseInt(v as any) || 0), 0);
+    }
+    return found.mod !== undefined ? (parseInt(found.mod) || 0) : (parseInt(found.value) || 0);
+  };
+
+  const getSkillBonus = (skillType: string, customSkillName: string = '') => {
+    if (!skillType) return 0;
+    let skill = null;
+    if (skillType === 'outro' && customSkillName) {
+      const cleanCustom = customSkillName.trim().toLowerCase();
+      skill = skills.find((s: any) => (s.name || '').toLowerCase() === cleanCustom || (s.id || '').toLowerCase() === cleanCustom);
+    } else {
+      skill = skills.find((s: any) => (s.id || '').toLowerCase() === skillType.toLowerCase() || (s.name || '').toLowerCase() === skillType.toLowerCase());
+    }
+
+    if (skill) {
+      const attrMod = getAttrVal(skill.attr);
+      const isTrained = !!skill.isTrained;
+      const others = parseInt(skill.others) || 0;
+      return (isTrained ? halfLevel : 0) + attrMod + others;
+    }
+
+    // Default fallback based on standard skills
+    if (skillType === 'luta') {
+      return halfLevel + getAttrVal('FOR');
+    }
+    if (skillType === 'pontaria') {
+      return halfLevel + getAttrVal('DES');
+    }
+    if (skillType === 'atletismo') {
+      return halfLevel + getAttrVal('FOR');
+    }
+    if (skillType === 'misticismo') {
+      return halfLevel + getAttrVal('INT');
+    }
+    return 0;
+  };
+
+  // 1. Process character.attacks
+  rawAttacks.forEach((atk: any, idx: number) => {
+    const name = atk.name || atk.weapon || `Ataque ${idx + 1}`;
+    
+    // Calculate attack bonus
+    let bonus = 0;
+    if (typeof atk.atkBonus === 'number') {
+      bonus = atk.atkBonus;
+    } else if (atk.atkBonus !== undefined && atk.atkBonus !== null && !isNaN(parseInt(atk.atkBonus))) {
+      bonus = parseInt(atk.atkBonus);
+    } else if (atk.skillType) {
+      bonus = getSkillBonus(atk.skillType, atk.customSkillName) + (parseInt(atk.attackBonus) || 0);
+    } else if (atk.attackBonus !== undefined && !isNaN(parseInt(atk.attackBonus))) {
+      bonus = parseInt(atk.attackBonus);
+    }
+
+    // Calculate damage formula
+    let damageStr = '';
+    if (Array.isArray(atk.damageComponents) && atk.damageComponents.length > 0) {
+      const comps = atk.damageComponents.map((c: any) => {
+        const count = c.diceCount || 1;
+        const faces = c.diceFaces || 8;
+        const type = c.damageType === 'Personalizado' ? (c.customDamageType || '') : (c.damageType || '');
+        return `${count}d${faces}${type ? ` ${type}` : ''}`.trim();
+      });
+      damageStr = comps.join(' + ');
+      const attrBonus = getAttrVal(atk.damageAttr);
+      const extraDmg = parseInt(atk.damageBonus) || 0;
+      const flatTotal = (atk.damageAttr ? attrBonus : 0) + extraDmg;
+      if (flatTotal !== 0) {
+        damageStr += ` ${flatTotal > 0 ? '+' : ''}${flatTotal}`;
+      }
+    } else if (atk.damage) {
+      damageStr = String(atk.damage);
+    } else {
+      damageStr = '1d8 Corte';
+    }
+
+    // Calculate critical
+    let critStr = '20/x2';
+    if (atk.critThreat) {
+      critStr = `${atk.critThreat}-20/x${atk.critMultiplier || 2}`;
+    } else if (atk.crit) {
+      critStr = String(atk.crit);
+    }
+
+    // Range & Type
+    const range = atk.range || atk.customRange || 'Corpo a corpo';
+    const damageType = atk.damageType || (atk.damageComponents && atk.damageComponents[0]?.damageType) || 'Dano';
+
+    list.push({
+      id: atk.id || `atk_${idx}`,
+      name,
+      weapon: name,
+      atkBonus: bonus,
+      atkBonusStr: bonus >= 0 ? `+${bonus}` : `${bonus}`,
+      damage: damageStr,
+      crit: critStr,
+      damageType,
+      range
+    });
+  });
+
+  // 2. If no attacks exist in char.attacks, check equipped weapons in inventory
+  if (list.length === 0) {
+    const equippedWeapons = rawInventory.filter((i: any) => (i.tag === 'Arma' || (i.category || '').toLowerCase().includes('arma')) && i.isEquipped);
+    equippedWeapons.forEach((weapon: any, idx: number) => {
+      const isRanged = weapon.consumesAmmo || false;
+      const attrMod = getAttrVal(isRanged ? 'DES' : 'FOR');
+      const bonus = halfLevel + attrMod;
+      const dmg = weapon.damage || (weapon.twoHanded ? '2d6 Corte' : '1d8 Corte');
+      const critRange = weapon.critRange || 20;
+      const critMult = weapon.critMultiplier ? String(weapon.critMultiplier).replace('x', '') : 2;
+
+      list.push({
+        id: weapon.id || `weap_${idx}`,
+        name: weapon.name || 'Arma Equipada',
+        weapon: weapon.name || 'Arma Equipada',
+        atkBonus: bonus,
+        atkBonusStr: bonus >= 0 ? `+${bonus}` : `${bonus}`,
+        damage: dmg,
+        crit: `${critRange}-20/x${critMult}`,
+        damageType: weapon.damageType || (isRanged ? 'Perfuração' : 'Corte'),
+        range: weapon.range || (isRanged ? '30m' : 'Corpo a corpo')
+      });
+    });
+  }
+
+  // 3. Ultimate Fallback if completely empty
+  if (list.length === 0) {
+    const forMod = getAttrVal('FOR');
+    const bonus = halfLevel + forMod;
+    list.push({
+      id: 'atk_default',
+      name: 'Ataque Desarmado',
+      weapon: 'Ataque Desarmado',
+      atkBonus: bonus,
+      atkBonusStr: bonus >= 0 ? `+${bonus}` : `${bonus}`,
+      damage: `1d3${forMod !== 0 ? (forMod > 0 ? `+${forMod}` : `${forMod}`) : ''} Impacto`,
+      crit: '20/x2',
+      damageType: 'Impacto',
+      range: 'Corpo a corpo'
+    });
+  }
+
+  return list;
+}
+
+/**
+ * Calculates total character defense and equipped armors breakdown
+ */
+function getCharacterDefense(char: any): { total: number; breakdown: string; armors: any[] } {
+  if (!char) return { total: 10, breakdown: '10 Base', armors: [] };
+
+  const attrs = Array.isArray(char.attributes) ? char.attributes : [];
+  const getAttrVal = (attrId: string) => {
+    if (!attrId) return 0;
+    const found = attrs.find((a: any) => (a.id || '').toUpperCase() === attrId.toUpperCase());
+    if (!found) return 0;
+    if (Array.isArray(found.values)) {
+      return found.values.reduce((sum: number, v: number) => sum + (parseInt(v as any) || 0), 0);
+    }
+    return found.mod !== undefined ? (parseInt(found.mod) || 0) : (parseInt(found.value) || 0);
+  };
+
+  const base = char.defenseBase !== undefined ? parseInt(char.defenseBase) || 10 : 10;
+  let total = base;
+  const breakdownParts: string[] = [`${base} Base`];
+
+  // Boxes
+  if (Array.isArray(char.defenseBoxes) && char.defenseBoxes.length > 0) {
+    char.defenseBoxes.forEach((b: any) => {
+      if (b.type === 'manual') {
+        const v = parseInt(b.value) || 0;
+        if (v !== 0) {
+          total += v;
+          breakdownParts.push(`${v > 0 ? `+${v}` : v} Outros`);
+        }
+      } else if (b.type === 'attr' && b.attrId) {
+        const v = getAttrVal(b.attrId);
+        if (v !== 0) {
+          total += v;
+          breakdownParts.push(`${v > 0 ? `+${v}` : v} ${b.attrId}`);
+        }
+      }
+    });
+  } else {
+    // Default to +DES
+    const desMod = getAttrVal('DES');
+    if (desMod !== 0) {
+      total += desMod;
+      breakdownParts.push(`${desMod > 0 ? `+${desMod}` : desMod} Destreza`);
+    }
+  }
+
+  // Check equipped armor and shields in inventory or armors array
+  const armorsList: any[] = [];
+  const inventory = Array.isArray(char.inventory) ? char.inventory : [];
+  inventory.forEach((item: any) => {
+    if ((item.tag === 'Armadura' || item.tag === 'Escudo' || (item.category || '').toLowerCase().includes('armadura') || (item.category || '').toLowerCase().includes('escudo')) && item.isEquipped) {
+      const defBonus = parseInt(item.defenseBonus || item.defense) || 0;
+      const penalty = parseInt(item.armorPenalty || item.penalty) || 0;
+      armorsList.push({
+        name: item.name || 'Armadura',
+        type: item.tag || item.category || 'Armadura',
+        defense: defBonus,
+        penalty: penalty,
+        equipped: true
+      });
+      if (defBonus !== 0) {
+        total += defBonus;
+        breakdownParts.push(`+${defBonus} ${item.name || 'Armadura'}`);
+      }
+    }
+  });
+
+  if (armorsList.length === 0 && Array.isArray(char.armors)) {
+    char.armors.forEach((arm: any) => {
+      if (arm.equipped) {
+        const defBonus = parseInt(arm.defense) || 0;
+        armorsList.push(arm);
+        if (defBonus !== 0) {
+          total += defBonus;
+          breakdownParts.push(`+${defBonus} ${arm.name || 'Armadura'}`);
+        }
+      }
+    });
+  }
+
+  return {
+    total,
+    breakdown: breakdownParts.join(' + ') + ` = ${total} Defesa`,
+    armors: armorsList
+  };
+}
+
+/**
  * Renders Read-Only Cabeçalho
  */
 function renderSheetTabCabecalho(char: any): string {
   let classesText = 'Aventureiro 1';
   if (char.classes && Array.isArray(char.classes) && char.classes.length > 0) {
-    classesText = char.classes.map((c: any) => `${c.name || 'Classe'} ${c.level || 1}`).join(' / ');
+    const valid = char.classes.filter((c: any) => c.name && c.name.trim());
+    if (valid.length > 0) {
+      classesText = valid.map((c: any) => `${c.name} ${c.level || 1}`).join(' / ');
+    }
   } else if (char.class1) {
-    classesText = char.class2 ? `${char.class1} / ${char.class2}` : `${char.class1} ${char.totalLevel || 1}`;
+    classesText = char.class2 ? `${char.class1} ${char.class1Level || 1} / ${char.class2} ${char.class2Level || 1}` : `${char.class1} ${char.totalLevel || 1}`;
   }
+
+  const creatorName = char.playerName || char.player || (window.currentUserProfile?.username || 'Aventureiro');
 
   return `
     <div class="space-y-3 font-rajdhani text-xs select-text">
@@ -5918,7 +6298,7 @@ function renderSheetTabCabecalho(char: any): string {
           <span class="font-bold text-slate-200">${escapeHtml(char.divinity || 'Nenhuma')}</span>
         </div>
         <div class="bg-[#0b0e1a] p-2.5 rounded-lg border border-indigo-500/20">
-          <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Alinhamento</span>
+          <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Alinhamento / Tendência</span>
           <span class="font-bold text-slate-200">${escapeHtml(char.alignment || 'Neutro')}</span>
         </div>
         <div class="bg-[#0b0e1a] p-2.5 rounded-lg border border-indigo-500/20">
@@ -5927,11 +6307,11 @@ function renderSheetTabCabecalho(char: any): string {
         </div>
         <div class="bg-[#0b0e1a] p-2.5 rounded-lg border border-indigo-500/20">
           <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Idade</span>
-          <span class="font-bold text-slate-200">${char.age ? `${char.age} anos` : 'Jovem'}</span>
+          <span class="font-bold text-slate-200">${char.age ? `${char.age} anos` : 'Não informada'}</span>
         </div>
         <div class="bg-[#0b0e1a] p-2.5 rounded-lg border border-indigo-500/20">
           <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Jogador / Criador</span>
-          <span class="font-bold text-indigo-300">${escapeHtml(char.player || 'testador')}</span>
+          <span class="font-bold text-indigo-300">${escapeHtml(creatorName)}</span>
         </div>
       </div>
     </div>
@@ -5942,27 +6322,37 @@ function renderSheetTabCabecalho(char: any): string {
  * Renders Read-Only Atributos with clickable test buttons
  */
 function renderSheetTabAtributos(char: any): string {
-  const attrs = char.attributes || [
-    { id: 'FOR', name: 'Força', value: 3, mod: 3 },
-    { id: 'DES', name: 'Destreza', value: 2, mod: 2 },
-    { id: 'CON', name: 'Constituição', value: 2, mod: 2 },
+  const defaultAttrs = [
+    { id: 'FOR', name: 'Força', value: 0, mod: 0 },
+    { id: 'DES', name: 'Destreza', value: 0, mod: 0 },
+    { id: 'CON', name: 'Constituição', value: 0, mod: 0 },
     { id: 'INT', name: 'Inteligência', value: 0, mod: 0 },
-    { id: 'SAB', name: 'Sabedoria', value: 1, mod: 1 },
+    { id: 'SAB', name: 'Sabedoria', value: 0, mod: 0 },
     { id: 'CAR', name: 'Carisma', value: 0, mod: 0 }
   ];
+
+  const rawAttrs = Array.isArray(char.attributes) && char.attributes.length > 0 ? char.attributes : defaultAttrs;
 
   let html = `
     <div class="space-y-2.5 font-rajdhani text-xs select-text">
       <div class="flex items-center justify-between pb-1 border-b border-indigo-500/20 text-slate-400 text-[10px] uppercase font-bold">
         <span>Atributo</span>
-        <span>Valor & Modificador</span>
+        <span>Modificador</span>
         <span>Ação Rápida</span>
       </div>
       <div class="grid grid-cols-1 gap-2">
   `;
 
-  attrs.forEach((a: any) => {
-    const mod = a.mod !== undefined ? a.mod : (a.value !== undefined ? a.value : 0);
+  rawAttrs.forEach((a: any) => {
+    let mod = 0;
+    if (Array.isArray(a.values)) {
+      mod = a.values.reduce((sum: number, v: number) => sum + (parseInt(v as any) || 0), 0);
+    } else if (a.mod !== undefined) {
+      mod = parseInt(a.mod) || 0;
+    } else if (a.value !== undefined) {
+      mod = parseInt(a.value) || 0;
+    }
+
     const modFormatted = mod >= 0 ? `+${mod}` : `${mod}`;
     const name = a.name || a.id;
 
@@ -5979,7 +6369,7 @@ function renderSheetTabAtributos(char: any): string {
         </div>
         <button 
           type="button" 
-          onclick="window.quickRollDice('1d20${mod >= 0 ? `+${mod}` : `${mod}`}', 'Teste de ${name}')" 
+          onclick="window.quickRollDice('1d20${mod >= 0 ? `+${mod}` : `${mod}`}', 'Teste de ${escapeHtml(name)}')" 
           class="px-2.5 py-1.5 rounded-lg bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-200 hover:text-white font-bold text-xs flex items-center space-x-1.5 transition-all shadow-sm"
           title="Rolar Teste de ${name} (1d20 ${modFormatted})"
         >
@@ -5998,85 +6388,126 @@ function renderSheetTabAtributos(char: any): string {
  * Standard T20 Perícias Table with Clickable Rolls
  */
 const T20_STANDARD_PERICIAS = [
-  { name: 'Acrobacia', attr: 'DES', trainedBonus: 2 },
-  { name: 'Adestramento', attr: 'CAR', trainedBonus: 0 },
-  { name: 'Atletismo', attr: 'FOR', trainedBonus: 2 },
-  { name: 'Atuação', attr: 'CAR', trainedBonus: 0 },
-  { name: 'Cavalgar', attr: 'DES', trainedBonus: 0 },
-  { name: 'Conhecimento', attr: 'INT', trainedBonus: 0 },
-  { name: 'Cura', attr: 'SAB', trainedBonus: 0 },
-  { name: 'Diplomacia', attr: 'CAR', trainedBonus: 2 },
-  { name: 'Enganação', attr: 'CAR', trainedBonus: 0 },
-  { name: 'Fortitude', attr: 'CON', trainedBonus: 2 },
-  { name: 'Furtividade', attr: 'DES', trainedBonus: 0 },
-  { name: 'Guerra', attr: 'INT', trainedBonus: 0 },
-  { name: 'Iniciativa', attr: 'DES', trainedBonus: 2 },
-  { name: 'Intimidação', attr: 'CAR', trainedBonus: 2 },
-  { name: 'Intuição', attr: 'SAB', trainedBonus: 0 },
-  { name: 'Investigação', attr: 'INT', trainedBonus: 0 },
-  { name: 'Jogatina', attr: 'CAR', trainedBonus: 0 },
-  { name: 'Ladinagem', attr: 'DES', trainedBonus: 0 },
-  { name: 'Luta', attr: 'FOR', trainedBonus: 2 },
-  { name: 'Misticismo', attr: 'INT', trainedBonus: 0 },
-  { name: 'Nobreza', attr: 'INT', trainedBonus: 0 },
-  { name: 'Ofício (Armeiro)', attr: 'INT', trainedBonus: 0 },
-  { name: 'Percepção', attr: 'SAB', trainedBonus: 2 },
-  { name: 'Pilotagem', attr: 'DES', trainedBonus: 0 },
-  { name: 'Pontaria', attr: 'DES', trainedBonus: 2 },
-  { name: 'Reflexos', attr: 'DES', trainedBonus: 2 },
-  { name: 'Religião', attr: 'SAB', trainedBonus: 0 },
-  { name: 'Sobrevivência', attr: 'SAB', trainedBonus: 0 },
-  { name: 'Vontade', attr: 'SAB', trainedBonus: 2 }
+  { id: 'acrobacia', name: 'Acrobacia', attr: 'DES', penalty: true },
+  { id: 'adestramento', name: 'Adestramento', attr: 'CAR', penalty: false },
+  { id: 'atletismo', name: 'Atletismo', attr: 'FOR', penalty: false },
+  { id: 'atuacao', name: 'Atuação', attr: 'CAR', penalty: false },
+  { id: 'cavalgar', name: 'Cavalgar', attr: 'DES', penalty: false },
+  { id: 'conhecimento', name: 'Conhecimento', attr: 'INT', penalty: false },
+  { id: 'cura', name: 'Cura', attr: 'SAB', penalty: false },
+  { id: 'diplomacia', name: 'Diplomacia', attr: 'CAR', penalty: false },
+  { id: 'enganacao', name: 'Enganação', attr: 'CAR', penalty: false },
+  { id: 'fortitude', name: 'Fortitude', attr: 'CON', penalty: false },
+  { id: 'furtividade', name: 'Furtividade', attr: 'DES', penalty: true },
+  { id: 'guerra', name: 'Guerra', attr: 'INT', penalty: false },
+  { id: 'iniciativa', name: 'Iniciativa', attr: 'DES', penalty: false },
+  { id: 'intimidacao', name: 'Intimidação', attr: 'CAR', penalty: false },
+  { id: 'intuicao', name: 'Intuição', attr: 'SAB', penalty: false },
+  { id: 'investigacao', name: 'Investigação', attr: 'INT', penalty: false },
+  { id: 'jogatina', name: 'Jogatina', attr: 'CAR', penalty: false },
+  { id: 'ladinagem', name: 'Ladinagem', attr: 'DES', penalty: true },
+  { id: 'luta', name: 'Luta', attr: 'FOR', penalty: false },
+  { id: 'misticismo', name: 'Misticismo', attr: 'INT', penalty: false },
+  { id: 'nobreza', name: 'Nobreza', attr: 'INT', penalty: false },
+  { id: 'oficio1', name: 'Ofício', attr: 'INT', penalty: false },
+  { id: 'percepcao', name: 'Percepção', attr: 'SAB', penalty: false },
+  { id: 'pilotagem', name: 'Pilotagem', attr: 'DES', penalty: false },
+  { id: 'pontaria', name: 'Pontaria', attr: 'DES', penalty: false },
+  { id: 'reflexos', name: 'Reflexos', attr: 'DES', penalty: false },
+  { id: 'religiao', name: 'Religião', attr: 'SAB', penalty: false },
+  { id: 'sobrevivencia', name: 'Sobrevivência', attr: 'SAB', penalty: false },
+  { id: 'vontade', name: 'Vontade', attr: 'SAB', penalty: false }
 ];
 
 function renderSheetTabPericias(char: any): string {
   const halfLevel = Math.floor((char.totalLevel || 1) / 2);
-  const attrs = char.attributes || [];
-  const getAttrMod = (id: string) => {
-    const a = attrs.find((x: any) => x.id === id);
-    return a ? (a.mod !== undefined ? a.mod : (a.value || 0)) : 0;
+  const attrs = Array.isArray(char.attributes) ? char.attributes : [];
+  
+  const getAttrVal = (attrId: string) => {
+    if (!attrId) return 0;
+    const found = attrs.find((a: any) => (a.id || '').toUpperCase() === attrId.toUpperCase());
+    if (!found) return 0;
+    if (Array.isArray(found.values)) {
+      return found.values.reduce((sum: number, v: number) => sum + (parseInt(v as any) || 0), 0);
+    }
+    return found.mod !== undefined ? (parseInt(found.mod) || 0) : (parseInt(found.value) || 0);
   };
+
+  const charSkills: any[] = Array.isArray(char.skills) && char.skills.length > 0 ? char.skills : [];
 
   let html = `
     <div class="space-y-2 font-rajdhani text-xs select-text">
       <div class="p-2 rounded-lg bg-indigo-950/40 border border-indigo-500/20 text-[11px] text-slate-300 flex justify-between items-center">
         <span>Metade do Nível (1/2 Lvl): <strong class="text-amber-300 font-mono">+${halfLevel}</strong></span>
-        <span class="text-indigo-300 font-bold">Clique em "Rolar" para enviar ao chat</span>
+        <span class="text-indigo-300 font-bold">Clique no bônus para rolar</span>
       </div>
       <div class="space-y-1.5 max-h-[480px] overflow-y-auto pr-1">
   `;
 
-  T20_STANDARD_PERICIAS.forEach(p => {
-    const attrMod = getAttrMod(p.attr);
-    const trained = p.trainedBonus > 0;
-    const totalBonus = halfLevel + attrMod + p.trainedBonus;
-    const bonusFormatted = totalBonus >= 0 ? `+${totalBonus}` : `${totalBonus}`;
+  if (charSkills.length > 0) {
+    charSkills.forEach(s => {
+      const attrMod = getAttrVal(s.attr);
+      const isTrained = !!s.isTrained;
+      const trainingBonus = isTrained ? (char.totalLevel >= 15 ? 6 : (char.totalLevel >= 7 ? 4 : 2)) : 0;
+      const others = parseInt(s.others) || 0;
+      const totalBonus = (isTrained ? halfLevel : 0) + attrMod + trainingBonus + others;
+      const bonusFormatted = totalBonus >= 0 ? `+${totalBonus}` : `${totalBonus}`;
+      const name = s.name || s.id;
 
-    html += `
-      <div class="bg-[#0b0e1a] p-2 rounded-lg border border-indigo-500/15 flex items-center justify-between hover:border-indigo-500/40 transition-colors">
-        <div>
-          <div class="flex items-center space-x-2">
-            <span class="font-bold text-white text-xs">${p.name}</span>
-            <span class="text-[9px] px-1.5 py-0.2 rounded font-mono font-bold ${trained ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40' : 'bg-slate-900 text-slate-500'}">
-              ${trained ? 'TREINADA' : 'DESTREINADA'}
-            </span>
+      html += `
+        <div class="bg-[#0b0e1a] p-2 rounded-lg border border-indigo-500/15 flex items-center justify-between hover:border-indigo-500/40 transition-colors">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="font-bold text-white text-xs">${escapeHtml(name)}</span>
+              <span class="text-[9px] px-1.5 py-0.2 rounded font-mono font-bold ${isTrained ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40' : 'bg-slate-900 text-slate-500'}">
+                ${isTrained ? 'TREINADA' : 'DESTREINADA'}
+              </span>
+            </div>
+            <p class="text-[10px] text-slate-400">
+              ${s.attr} (${attrMod >= 0 ? `+${attrMod}` : attrMod}) &bull; ${isTrained ? `Treino: +${trainingBonus} ` : ''}${others !== 0 ? `Outros: ${others > 0 ? `+${others}` : others} ` : ''}&bull; Total: <strong class="text-amber-300 font-mono font-bold">${bonusFormatted}</strong>
+            </p>
           </div>
-          <p class="text-[10px] text-slate-400">
-            ${p.attr} (${attrMod >= 0 ? `+${attrMod}` : attrMod}) &bull; Treino: +${p.trainedBonus} &bull; Total: <strong class="text-amber-300 font-mono font-bold">${bonusFormatted}</strong>
-          </p>
+          <button 
+            type="button" 
+            onclick="window.quickRollDice('1d20${bonusFormatted}', 'Perícia: ${escapeHtml(name)}')" 
+            class="px-2 py-1 rounded bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-200 hover:text-white font-bold text-[11px] flex items-center space-x-1 shadow-sm"
+            title="Rolar ${name} (1d20 ${bonusFormatted})"
+          >
+            <span>🎲</span>
+            <span>${bonusFormatted}</span>
+          </button>
         </div>
-        <button 
-          type="button" 
-          onclick="window.quickRollDice('1d20${bonusFormatted}', 'Perícia: ${p.name}')" 
-          class="px-2 py-1 rounded bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-200 hover:text-white font-bold text-[11px] flex items-center space-x-1 shadow-sm"
-          title="Rolar ${p.name} (1d20 ${bonusFormatted})"
-        >
-          <span>🎲</span>
-          <span>${bonusFormatted}</span>
-        </button>
-      </div>
-    `;
-  });
+      `;
+    });
+  } else {
+    T20_STANDARD_PERICIAS.forEach(p => {
+      const attrMod = getAttrVal(p.attr);
+      const totalBonus = halfLevel + attrMod;
+      const bonusFormatted = totalBonus >= 0 ? `+${totalBonus}` : `${totalBonus}`;
+
+      html += `
+        <div class="bg-[#0b0e1a] p-2 rounded-lg border border-indigo-500/15 flex items-center justify-between hover:border-indigo-500/40 transition-colors">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="font-bold text-white text-xs">${p.name}</span>
+            </div>
+            <p class="text-[10px] text-slate-400">
+              ${p.attr} (${attrMod >= 0 ? `+${attrMod}` : attrMod}) &bull; Total: <strong class="text-amber-300 font-mono font-bold">${bonusFormatted}</strong>
+            </p>
+          </div>
+          <button 
+            type="button" 
+            onclick="window.quickRollDice('1d20${bonusFormatted}', 'Perícia: ${p.name}')" 
+            class="px-2 py-1 rounded bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-200 hover:text-white font-bold text-[11px] flex items-center space-x-1 shadow-sm"
+            title="Rolar ${p.name} (1d20 ${bonusFormatted})"
+          >
+            <span>🎲</span>
+            <span>${bonusFormatted}</span>
+          </button>
+        </div>
+      `;
+    });
+  }
 
   html += `</div></div>`;
   return html;
@@ -6090,7 +6521,8 @@ function renderSheetTabDefesas(char: any): string {
   const pvMax = char.pvMax !== undefined ? char.pvMax : 24;
   const pmAtual = char.pmAtual !== undefined ? char.pmAtual : 8;
   const pmMax = char.pmMax !== undefined ? char.pmMax : 8;
-  const defense = char.defense || 18;
+  
+  const defData = getCharacterDefense(char);
 
   return `
     <div class="space-y-3 font-rajdhani text-xs select-text">
@@ -6102,7 +6534,7 @@ function renderSheetTabDefesas(char: any): string {
             <span class="font-mono font-bold text-red-200 text-sm">${pvAtual} / ${pvMax}</span>
           </div>
           <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden">
-            <div class="bg-red-500 h-full rounded-full" style="width: ${Math.min(100, Math.max(0, (pvAtual / pvMax) * 100))}%"></div>
+            <div class="bg-red-500 h-full rounded-full transition-all duration-300" style="width: ${Math.min(100, Math.max(0, (pvAtual / (pvMax || 1)) * 100))}%"></div>
           </div>
         </div>
 
@@ -6112,7 +6544,7 @@ function renderSheetTabDefesas(char: any): string {
             <span class="font-mono font-bold text-indigo-200 text-sm">${pmAtual} / ${pmMax}</span>
           </div>
           <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden">
-            <div class="bg-indigo-500 h-full rounded-full" style="width: ${Math.min(100, Math.max(0, (pmAtual / pmMax) * 100))}%"></div>
+            <div class="bg-indigo-500 h-full rounded-full transition-all duration-300" style="width: ${Math.min(100, Math.max(0, (pmAtual / (pmMax || 1)) * 100))}%"></div>
           </div>
         </div>
       </div>
@@ -6120,27 +6552,32 @@ function renderSheetTabDefesas(char: any): string {
       <!-- Defesa breakdown -->
       <div class="bg-[#0b0e1a] p-3 rounded-xl border border-indigo-500/20 space-y-2">
         <div class="flex items-center justify-between">
-          <span class="font-orbitron font-bold text-white text-xs">Classe de Armadura / Defesa</span>
-          <span class="font-orbitron font-bold text-lg text-amber-300">${defense}</span>
+          <span class="font-orbitron font-bold text-white text-xs">Defesa Total / Classe de Armadura</span>
+          <span class="font-orbitron font-bold text-lg text-amber-300">${defData.total}</span>
         </div>
-        <p class="text-[10px] text-slate-400 leading-relaxed">
-          Composição estimada: 10 Base + 2 Destreza + 5 Armadura Pesada (Brunea) + 1 Escudo Leve = <strong>${defense} Defesa</strong>
+        <p class="text-[10px] text-slate-400 leading-relaxed font-mono">
+          ${escapeHtml(defData.breakdown)}
         </p>
       </div>
 
-      <!-- Resistências -->
+      <!-- Armaduras e Proteções Equipadas -->
       <div class="bg-[#0b0e1a] p-3 rounded-xl border border-indigo-500/20 space-y-1.5">
-        <span class="font-orbitron font-bold text-indigo-300 text-xs block">Resistências & Reduções de Dano</span>
-        <div class="grid grid-cols-2 gap-2 text-xs">
-          <div class="bg-slate-900/60 p-2 rounded border border-slate-800">
-            <span class="text-slate-400 block text-[10px]">Redução de Dano (RD)</span>
-            <span class="font-bold text-white">0</span>
+        <span class="font-orbitron font-bold text-indigo-300 text-xs block">Armaduras & Proteções Equipadas</span>
+        ${defData.armors.length === 0 ? `
+          <p class="text-slate-500 text-[11px] italic">Nenhuma armadura ou escudo equipado no momento.</p>
+        ` : `
+          <div class="space-y-1.5">
+            ${defData.armors.map(arm => `
+              <div class="bg-slate-900/60 p-2 rounded-lg border border-slate-800 flex items-center justify-between">
+                <div>
+                  <strong class="text-white text-xs">${escapeHtml(arm.name)}</strong>
+                  <span class="text-slate-400 text-[10px] ml-1.5">(${escapeHtml(arm.type || 'Proteção')}${arm.penalty ? ` &bull; Penalidade: -${arm.penalty}` : ''})</span>
+                </div>
+                <span class="text-indigo-300 font-mono font-bold text-xs">+${arm.defense || 0} Def</span>
+              </div>
+            `).join('')}
           </div>
-          <div class="bg-slate-900/60 p-2 rounded border border-slate-800">
-            <span class="text-slate-400 block text-[10px]">Resistência à Magia</span>
-            <span class="font-bold text-white">+0 em testes</span>
-          </div>
-        </div>
+        `}
       </div>
     </div>
   `;
@@ -6150,45 +6587,41 @@ function renderSheetTabDefesas(char: any): string {
  * Renders Read-Only Ataques with attack roll trigger
  */
 function renderSheetTabAtaques(char: any): string {
-  const attacks = char.attacks || [
-    { weapon: 'Espada Longa', atkBonus: 6, damage: '1d8+4', crit: '19-20/x2', type: 'Corte', range: 'Corpo a corpo' },
-    { weapon: 'Arco Curto', atkBonus: 5, damage: '1d6+2', crit: 'x3', type: 'Perfuração', range: '30m' }
-  ];
+  const attacks = getFormattedAttackList(char);
 
   let html = `
     <div class="space-y-2.5 font-rajdhani text-xs select-text">
       <div class="p-2 rounded-lg bg-indigo-950/40 border border-indigo-500/20 text-[11px] text-slate-300">
-        Armas prontas para combate. Clique no botão de ataque para rolar no chat.
+        Ataques cadastrados na ficha. Clique no botão para rolar teste de acerto e dano no chat.
       </div>
   `;
 
-  attacks.forEach((atk: any) => {
-    const bonus = atk.atkBonus >= 0 ? `+${atk.atkBonus}` : `${atk.atkBonus}`;
+  attacks.forEach((atk) => {
     html += `
       <div class="bg-[#0b0e1a] p-3 rounded-xl border border-red-500/20 hover:border-red-500/40 transition-colors space-y-2">
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-2">
             <span class="text-red-400 text-sm">⚔️</span>
-            <h5 class="font-orbitron font-bold text-white text-xs">${escapeHtml(atk.weapon || 'Arma')}</h5>
+            <h5 class="font-orbitron font-bold text-white text-xs">${escapeHtml(atk.name)}</h5>
           </div>
           <span class="bg-red-950 text-red-300 border border-red-500/40 font-mono font-bold text-[11px] px-2 py-0.5 rounded">
-            Ataque: ${bonus}
+            Ataque: ${atk.atkBonusStr}
           </span>
         </div>
 
         <div class="grid grid-cols-3 gap-1.5 text-[10px] text-slate-300 bg-slate-950/60 p-2 rounded-lg">
-          <div>Dano: <strong class="text-amber-300 font-mono font-bold">${atk.damage || '1d8'}</strong></div>
-          <div>Crítico: <strong class="text-white font-mono">${atk.crit || 'x2'}</strong></div>
-          <div>Alcance: <strong class="text-white">${atk.range || 'Corpo a corpo'}</strong></div>
+          <div>Dano: <strong class="text-amber-300 font-mono font-bold">${escapeHtml(atk.damage)}</strong></div>
+          <div>Crítico: <strong class="text-white font-mono">${escapeHtml(atk.crit)}</strong></div>
+          <div>Alcance: <strong class="text-white">${escapeHtml(atk.range)}</strong></div>
         </div>
 
         <button 
           type="button" 
-          onclick="window.rollCharacterAttack('${escapeHtml(atk.weapon || 'Arma')}', ${atk.atkBonus || 0}, '${atk.damage || '1d8'}', '${atk.crit || '20/x2'}')" 
+          onclick="window.rollCharacterAttack('${escapeHtml(atk.name)}', ${atk.atkBonus}, '${escapeHtml(atk.damage)}', '${escapeHtml(atk.crit)}')" 
           class="w-full py-1.5 rounded-lg bg-gradient-to-r from-red-900 to-amber-900 hover:from-red-800 hover:to-amber-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md transition-all"
         >
           <span>🎲</span>
-          <span>Rolar Ataque & Dano (${bonus} &bull; ${atk.damage})</span>
+          <span>Rolar Ataque & Dano (${atk.atkBonusStr} &bull; ${escapeHtml(atk.damage)})</span>
         </button>
       </div>
     `;
@@ -6199,57 +6632,62 @@ function renderSheetTabAtaques(char: any): string {
 }
 
 /**
- * Renders Read-Only Habilidades & Magias
+ * Renders Read-Only Habilidades, Poderes & Magias (reads char.customSections dynamically)
  */
 function renderSheetTabHabilidades(char: any): string {
-  return `
-    <div class="space-y-3 font-rajdhani text-xs select-text">
-      <!-- Poderes de Classe -->
-      <div class="bg-[#0b0e1a] p-3 rounded-xl border border-indigo-500/20 space-y-2">
-        <h5 class="font-orbitron font-bold text-purple-300 text-xs uppercase flex items-center space-x-1.5">
-          <span>🛡️</span>
-          <span>Habilidades de Classe (Guerreiro)</span>
-        </h5>
-        <div class="space-y-2 text-xs">
-          <div class="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800">
-            <strong class="text-white block">Ataque Especial (1 PM):</strong>
-            <p class="text-slate-300 text-[11px] mt-0.5 leading-relaxed">Você pode gastar 1 PM para receber +4 no teste de ataque ou +4 na rolagem de dano deste ataque.</p>
-          </div>
-          <div class="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800">
-            <strong class="text-white block">Durabilidade de Aço:</strong>
-            <p class="text-slate-300 text-[11px] mt-0.5 leading-relaxed">Você recebe +2 em testes de Fortitude e ignora a penalidade de armadura em Atletismo.</p>
-          </div>
-        </div>
-      </div>
+  const sections = Array.isArray(char.customSections) ? char.customSections : [];
 
-      <!-- Poderes de Origem & Raça -->
-      <div class="bg-[#0b0e1a] p-3 rounded-xl border border-indigo-500/20 space-y-2">
-        <h5 class="font-orbitron font-bold text-indigo-300 text-xs uppercase flex items-center space-x-1.5">
-          <span>👑</span>
-          <span>Poderes de Raça & Origem (Guarda)</span>
-        </h5>
-        <div class="space-y-2 text-xs">
-          <div class="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800">
-            <strong class="text-white block">Detetive Urbano:</strong>
-            <p class="text-slate-300 text-[11px] mt-0.5 leading-relaxed">+2 em testes de Investigação e Percepção dentro de cidades.</p>
-          </div>
-          <div class="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800">
-            <strong class="text-white block">Versatilidade Humana:</strong>
-            <p class="text-slate-300 text-[11px] mt-0.5 leading-relaxed">+1 perícia treinada extra e +1 poder geral à escolha.</p>
-          </div>
+  if (sections.length === 0) {
+    return `
+      <div class="space-y-3 font-rajdhani text-xs select-text">
+        <div class="p-4 rounded-xl bg-[#0b0e1a] border border-dashed border-indigo-500/30 text-center space-y-2">
+          <div class="text-2xl">✨</div>
+          <h5 class="font-orbitron font-bold text-white text-xs">Nenhuma habilidade ou magia cadastrada</h5>
+          <p class="text-slate-400 text-[11px] leading-relaxed max-w-md mx-auto">
+            Cadastre magias, habilidades de raça, poderes de classe e outras informações na aba <strong>"Magias e Habilidades"</strong> da Ficha para vê-las aqui durante a sessão.
+          </p>
         </div>
       </div>
-    </div>
-  `;
+    `;
+  }
+
+  let html = `<div class="space-y-3 font-rajdhani text-xs select-text">`;
+
+  sections.forEach((sec: any) => {
+    const title = sec.title || sec.name || 'Habilidades';
+    const category = sec.category || sec.type || 'Poder';
+    const content = sec.content || sec.description || sec.text || '';
+
+    html += `
+      <div class="bg-[#0b0e1a] p-3 rounded-xl border border-indigo-500/20 space-y-2">
+        <div class="flex items-center justify-between pb-1 border-b border-indigo-500/15">
+          <h5 class="font-orbitron font-bold text-purple-300 text-xs uppercase flex items-center space-x-1.5">
+            <span>✨</span>
+            <span>${escapeHtml(title)}</span>
+          </h5>
+          <span class="bg-indigo-950 text-indigo-300 border border-indigo-500/30 font-mono text-[9px] px-2 py-0.5 rounded">
+            ${escapeHtml(category)}
+          </span>
+        </div>
+        <div class="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800">
+          <p class="text-slate-300 text-[11px] leading-relaxed whitespace-pre-wrap">${escapeHtml(content || 'Sem descrição.')}</p>
+        </div>
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+  return html;
 }
 
 /**
  * Renders Read-Only Inventário
  */
 function renderSheetTabInventario(char: any): string {
-  const inv = char.inventory || [];
-  const tibares = char.tibares !== undefined ? char.tibares : 145;
-  const currentWeight = inv.reduce((sum: number, item: any) => sum + ((item.weight || 0) * (item.quantity || 1)), 0);
+  const inv = Array.isArray(char.inventory) ? char.inventory : [];
+  const money = char.money !== undefined ? char.money : (char.tibares !== undefined ? char.tibares : 0);
+  const currencyName = char.currencyName || 'T$ (Tibares)';
+  const currentWeight = inv.reduce((sum: number, item: any) => sum + ((parseFloat(item.weight) || 0) * (parseInt(item.quantity) || 1)), 0);
   const maxWeight = 15;
 
   let html = `
@@ -6258,14 +6696,14 @@ function renderSheetTabInventario(char: any): string {
       <div class="grid grid-cols-2 gap-2">
         <div class="bg-amber-950/30 p-2.5 rounded-xl border border-amber-500/30 flex items-center justify-between">
           <div>
-            <span class="text-[10px] text-amber-300 uppercase font-bold block">Moedas / Tibares</span>
-            <span class="font-mono font-bold text-amber-200 text-sm">T$ ${tibares}</span>
+            <span class="text-[10px] text-amber-300 uppercase font-bold block">${escapeHtml(currencyName)}</span>
+            <span class="font-mono font-bold text-amber-200 text-sm">${money}</span>
           </div>
           <span class="text-xl">💰</span>
         </div>
         <div class="bg-indigo-950/30 p-2.5 rounded-xl border border-indigo-500/30 flex items-center justify-between">
           <div>
-            <span class="text-[10px] text-indigo-300 uppercase font-bold block">Carga / Capacidade</span>
+            <span class="text-[10px] text-indigo-300 uppercase font-bold block">Carga Total</span>
             <span class="font-mono font-bold text-white text-xs">${currentWeight.toFixed(1)} / ${maxWeight} kg</span>
           </div>
           <span class="text-xl">🎒</span>
@@ -6277,23 +6715,32 @@ function renderSheetTabInventario(char: any): string {
   `;
 
   if (inv.length === 0) {
-    html += `<div class="p-4 text-center text-slate-500 italic">Mochila vazia.</div>`;
+    html += `<div class="p-4 text-center text-slate-500 italic bg-[#0b0e1a] rounded-xl border border-dashed border-indigo-500/20">Mochila vazia.</div>`;
   } else {
     inv.forEach((item: any) => {
+      const tag = item.tag || item.category || 'Geral';
+      const weight = parseFloat(item.weight) || 0;
+      const qty = parseInt(item.quantity) || 1;
+      const totalItemWeight = (weight * qty).toFixed(1);
+
       html += `
         <div class="bg-[#0b0e1a] p-2.5 rounded-xl border border-indigo-500/20 flex items-center justify-between">
           <div>
             <div class="flex items-center space-x-2">
               <span class="font-bold text-white text-xs">${escapeHtml(item.name || 'Item')}</span>
               <span class="bg-indigo-950 text-indigo-300 border border-indigo-500/40 text-[10px] font-mono px-1.5 rounded">
-                x${item.quantity || 1}
+                x${qty}
               </span>
+              <span class="bg-slate-900 text-slate-400 border border-slate-700 text-[9px] px-1 rounded">
+                ${escapeHtml(tag)}
+              </span>
+              ${item.isEquipped ? `<span class="bg-emerald-950 text-emerald-300 border border-emerald-500/40 text-[9px] px-1 rounded font-bold">EQUIPADO</span>` : ''}
             </div>
             <p class="text-[10px] text-slate-400 mt-0.5">
-              ${item.weight ? `${item.weight} kg cada` : '0 kg'} ${item.notes ? `&bull; ${escapeHtml(item.notes)}` : ''}
+              ${weight > 0 ? `${weight} kg cada ` : ''}${item.notes ? `&bull; ${escapeHtml(item.notes)}` : ''}
             </p>
           </div>
-          <span class="text-[10px] text-slate-400 font-mono">${((item.weight || 0) * (item.quantity || 1)).toFixed(1)} kg</span>
+          <span class="text-[10px] text-slate-400 font-mono">${totalItemWeight} kg</span>
         </div>
       `;
     });
@@ -6304,26 +6751,76 @@ function renderSheetTabInventario(char: any): string {
 }
 
 /**
- * Renders Read-Only Lore & Diário
+ * Renders Read-Only Lore, Background & Diário
  */
 function renderSheetTabLore(char: any): string {
+  const physicalDetails = [
+    char.eyes ? `<strong>Olhos:</strong> ${escapeHtml(char.eyes)}` : '',
+    char.skin ? `<strong>Pele:</strong> ${escapeHtml(char.skin)}` : '',
+    char.hair ? `<strong>Cabelo:</strong> ${escapeHtml(char.hair)}` : '',
+    (char.appearanceOther || char.appearance) ? `<strong>Outros Detalhes:</strong> ${escapeHtml(char.appearanceOther || char.appearance)}` : ''
+  ].filter(Boolean);
+
+  const personalDetails = [
+    char.personality ? `<strong>Personalidade:</strong> ${escapeHtml(char.personality)}` : '',
+    char.genderIdentity ? `<strong>Identidade de Gênero:</strong> ${escapeHtml(char.genderIdentity)}` : '',
+    char.sexualOrientation ? `<strong>Orientação Sexual:</strong> ${escapeHtml(char.sexualOrientation)}` : '',
+    char.activism ? `<strong>Ativismo & Causas:</strong> ${escapeHtml(char.activism)}` : '',
+    char.prejudices ? `<strong>Preconceitos & Aversões:</strong> ${escapeHtml(char.prejudices)}` : '',
+    char.likesOther ? `<strong>Gostos & Outros:</strong> ${escapeHtml(char.likesOther)}` : ''
+  ].filter(Boolean);
+
+  const episodes = Array.isArray(char.episodes) ? char.episodes : [];
+
   return `
     <div class="space-y-3 font-rajdhani text-xs select-text">
       <!-- Background -->
       <div class="bg-[#0b0e1a] p-3 rounded-xl border border-indigo-500/20 space-y-1.5">
         <h5 class="font-orbitron font-bold text-indigo-300 text-xs uppercase">Histórico / Background</h5>
-        <p class="text-slate-300 leading-relaxed text-xs">
+        <p class="text-slate-300 leading-relaxed text-xs whitespace-pre-wrap">
           ${escapeHtml(char.background || 'Histórico não preenchido.')}
         </p>
       </div>
 
-      <!-- Appearance -->
+      <!-- Appearance & Physical Traits -->
       <div class="bg-[#0b0e1a] p-3 rounded-xl border border-indigo-500/20 space-y-1.5">
         <h5 class="font-orbitron font-bold text-indigo-300 text-xs uppercase">Descrição Física & Aparência</h5>
-        <p class="text-slate-300 leading-relaxed text-xs">
-          ${escapeHtml(char.appearance || 'Aparência não preenchida.')}
-        </p>
+        ${physicalDetails.length > 0 ? `
+          <div class="space-y-1 text-slate-300 text-xs">
+            ${physicalDetails.map(d => `<p class="leading-relaxed">${d}</p>`).join('')}
+          </div>
+        ` : `
+          <p class="text-slate-400 text-xs italic">Nenhuma descrição física detalhada.</p>
+        `}
       </div>
+
+      <!-- Personality & Identity -->
+      ${personalDetails.length > 0 ? `
+        <div class="bg-[#0b0e1a] p-3 rounded-xl border border-indigo-500/20 space-y-1.5">
+          <h5 class="font-orbitron font-bold text-indigo-300 text-xs uppercase">Personalidade & Identidade</h5>
+          <div class="space-y-1 text-slate-300 text-xs">
+            ${personalDetails.map(d => `<p class="leading-relaxed">${d}</p>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- Episodes / Campaign Log -->
+      ${episodes.length > 0 ? `
+        <div class="bg-[#0b0e1a] p-3 rounded-xl border border-indigo-500/20 space-y-2">
+          <h5 class="font-orbitron font-bold text-indigo-300 text-xs uppercase">Participação por Episódio</h5>
+          <div class="space-y-2">
+            ${episodes.map((ep: any, idx: number) => `
+              <div class="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800 space-y-1">
+                <div class="flex justify-between items-center">
+                  <strong class="text-white text-xs">${escapeHtml(ep.title || `Episódio ${idx + 1}`)}</strong>
+                  ${ep.xpRewards ? `<span class="text-amber-300 font-mono text-[10px]">${escapeHtml(ep.xpRewards)}</span>` : ''}
+                </div>
+                <p class="text-slate-300 text-[11px] leading-relaxed whitespace-pre-wrap">${escapeHtml(ep.summary || ep.notes || 'Sem anotações.')}</p>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
     </div>
   `;
 }
@@ -6332,7 +6829,7 @@ function renderSheetTabLore(char: any): string {
  * Copies the current sheet tab text to clipboard
  */
 window.copyCurrentTabContent = function() {
-  const contentEl = document.getElementById('game-sheet-content');
+  const contentEl = document.getElementById('game-sheet-tab-display') || document.getElementById('game-sheet-content');
   if (!contentEl) return;
 
   const text = contentEl.innerText;
@@ -6381,6 +6878,21 @@ window.closeGameRightSidebarMobile = function() {
 };
 
 /**
+ * Mobile / Tablet extra tools dropdown toggle
+ */
+window.toggleSessionMoreToolsMenu = function(forceState?: boolean) {
+  const menu = document.getElementById('session-more-tools-menu');
+  if (!menu) return;
+  if (forceState !== undefined) {
+    if (forceState) menu.classList.remove('hidden');
+    else menu.classList.add('hidden');
+  } else {
+    menu.classList.toggle('hidden');
+  }
+  if ((window as any).lucide) (window as any).lucide.createIcons();
+};
+
+/**
  * Updates the Right Sidebar Mini Cabeçalho PV and PM bars, text values and color states
  */
 window.updateGameHUD = function() {
@@ -6389,7 +6901,19 @@ window.updateGameHUD = function() {
   const pvMax = char.pvMax !== undefined ? char.pvMax : 24;
   const pmAtual = char.pmAtual !== undefined ? char.pmAtual : 8;
   const pmMax = char.pmMax !== undefined ? char.pmMax : 8;
-  const defense = char.defense || 18;
+  
+  const defData = getCharacterDefense(char);
+
+  // Classes text
+  let classesText = 'Aventureiro 1';
+  if (char.classes && Array.isArray(char.classes) && char.classes.length > 0) {
+    const valid = char.classes.filter((c: any) => c.name && c.name.trim());
+    if (valid.length > 0) {
+      classesText = valid.map((c: any) => `${c.name} ${c.level || 1}`).join(' / ');
+    }
+  } else if (char.class1) {
+    classesText = char.class2 ? `${char.class1} / ${char.class2}` : `${char.class1} ${char.totalLevel || 1}`;
+  }
 
   // Header Details
   const nameEl = document.getElementById('hud-char-name');
@@ -6397,8 +6921,8 @@ window.updateGameHUD = function() {
   const defEl = document.getElementById('hud-defense-val');
 
   if (nameEl) nameEl.innerText = char.name || 'Herói';
-  if (detailsEl) detailsEl.innerText = `${char.race || 'Humano'} &bull; ${char.class1 || 'Guerreiro'} (Nvl ${char.totalLevel || 1})`;
-  if (defEl) defEl.innerText = defense.toString();
+  if (detailsEl) detailsEl.innerText = `${char.race || 'Humano'} • ${classesText}`;
+  if (defEl) defEl.innerText = defData.total.toString();
 
   // PV Elements
   const pvAtualEl = document.getElementById('hud-pv-atual');
@@ -6523,33 +7047,29 @@ window.renderEquippedWeapons = function() {
   if (!container) return;
 
   const char = activeGameCharacter || {};
-  const attacks = char.attacks || [
-    { weapon: 'Espada Longa', atkBonus: 6, damage: '1d8+4', crit: '19-20/x2', type: 'Corte', range: 'Corpo a corpo' },
-    { weapon: 'Arco Curto', atkBonus: 5, damage: '1d6+2', crit: 'x3', type: 'Perfuração', range: '30m' }
-  ];
+  const attacks = getFormattedAttackList(char);
 
   let html = '';
-  attacks.forEach((atk: any) => {
-    const bonus = atk.atkBonus >= 0 ? `+${atk.atkBonus}` : `${atk.atkBonus}`;
+  attacks.forEach((atk) => {
     html += `
       <div class="bg-[#0b0e1a] p-2.5 rounded-xl border border-red-500/25 hover:border-red-500/50 transition-all flex items-center justify-between group">
         <div>
           <div class="flex items-center space-x-2">
             <span class="text-xs text-red-400">⚔️</span>
-            <h5 class="font-orbitron font-bold text-white text-xs">${escapeHtml(atk.weapon || 'Arma')}</h5>
+            <h5 class="font-orbitron font-bold text-white text-xs">${escapeHtml(atk.name)}</h5>
           </div>
           <p class="text-[10px] text-slate-400 mt-0.5">
-            Dano: <strong class="text-amber-300 font-mono">${atk.damage || '1d8'}</strong> &bull; Crítico: <span class="font-mono text-slate-300">${atk.crit || 'x2'}</span>
+            Dano: <strong class="text-amber-300 font-mono">${escapeHtml(atk.damage)}</strong> &bull; Crítico: <span class="font-mono text-slate-300">${escapeHtml(atk.crit)}</span>
           </p>
         </div>
         <button 
           type="button" 
-          onclick="window.rollCharacterAttack('${escapeHtml(atk.weapon || 'Arma')}', ${atk.atkBonus || 0}, '${atk.damage || '1d8'}', '${atk.crit || '20/x2'}')" 
+          onclick="window.rollCharacterAttack('${escapeHtml(atk.name)}', ${atk.atkBonus}, '${escapeHtml(atk.damage)}', '${escapeHtml(atk.crit)}')" 
           class="px-2.5 py-1.5 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-500/40 text-red-200 hover:text-white font-bold text-xs flex items-center space-x-1 transition-all shadow-sm"
-          title="Rolar Ataque (${bonus})"
+          title="Rolar Ataque (${atk.atkBonusStr})"
         >
           <span>🎲</span>
-          <span>${bonus}</span>
+          <span>${atk.atkBonusStr}</span>
         </button>
       </div>
     `;
@@ -6566,10 +7086,17 @@ window.renderEquippedArmor = function() {
   if (!container) return;
 
   const char = activeGameCharacter || {};
-  const armors = char.armors || [
-    { name: 'Brunea de Aço', defense: 5, penalty: 2, type: 'Pesada', equipped: true },
-    { name: 'Escudo Leve', defense: 1, penalty: 1, type: 'Escudo', equipped: true }
-  ];
+  const defData = getCharacterDefense(char);
+  const armors = defData.armors;
+
+  if (armors.length === 0) {
+    container.innerHTML = `
+      <div class="p-3 text-center text-slate-500 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-indigo-500/20">
+        Nenhuma armadura equipada.
+      </div>
+    `;
+    return;
+  }
 
   let html = '';
   armors.forEach((arm: any) => {
@@ -6581,7 +7108,7 @@ window.renderEquippedArmor = function() {
             <h5 class="font-bold text-white text-xs">${escapeHtml(arm.name || 'Armadura')}</h5>
           </div>
           <p class="text-[10px] text-slate-400 mt-0.5">
-            Tipo: ${escapeHtml(arm.type || 'Leve')} &bull; Penalidade: -${arm.penalty || 0}
+            Tipo: ${escapeHtml(arm.type || 'Leve')}${arm.penalty ? ` &bull; Penalidade: -${arm.penalty}` : ''}
           </p>
         </div>
         <span class="bg-indigo-950 text-indigo-300 border border-indigo-400/40 font-mono font-bold text-xs px-2 py-0.5 rounded">
@@ -7156,7 +7683,26 @@ window.renderSessionMessages = function(messages: SessionMessage[]) {
 
   let html = '';
   messages.forEach(msg => {
-    const timeStr = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    let timeStr = '';
+    if (msg.createdAt) {
+      try {
+        let dateObj: Date | null = null;
+        if (typeof (msg.createdAt as any)?.toDate === 'function') {
+          dateObj = (msg.createdAt as any).toDate();
+        } else if (typeof (msg.createdAt as any)?.toMillis === 'function') {
+          dateObj = new Date((msg.createdAt as any).toMillis());
+        } else if ((msg.createdAt as any)?.seconds !== undefined) {
+          dateObj = new Date((msg.createdAt as any).seconds * 1000);
+        } else {
+          dateObj = new Date(msg.createdAt as any);
+        }
+        if (dateObj && !isNaN(dateObj.getTime())) {
+          timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+      } catch (err) {
+        timeStr = '';
+      }
+    }
     const isNarrator = msg.senderRole === 'narrator';
     const isSystem = msg.senderRole === 'system';
     const isRoll = msg.type === 'roll';

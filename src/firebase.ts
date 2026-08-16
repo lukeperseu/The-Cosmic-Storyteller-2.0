@@ -30,6 +30,11 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account'
+});
+
+let isAuthInProgress = false;
 
 export interface UserProfileData {
   uid: string;
@@ -73,15 +78,47 @@ export function cleanDataForFirestore<T>(data: T): T {
 }
 
 /**
- * Triggers Google Sign-In via Popup
+ * Triggers Google Sign-In via Popup with mutex locking and friendly error handling
  */
 export async function loginWithGoogle() {
+  if (isAuthInProgress) {
+    console.warn("Autenticação com Google já está em andamento. Aguardando...");
+    throw new Error("Uma janela de login do Google já está aberta ou em andamento.");
+  }
+
+  isAuthInProgress = true;
   try {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error: any) {
+    const code = error?.code || '';
+    const msg = error?.message || '';
+
+    // Handle known popup issues gracefully
+    if (code === 'auth/cancelled-popup-request' || msg.includes('cancelled-popup-request')) {
+      console.warn("Requisição de popup anterior cancelada.");
+      throw new Error("A requisição de login anterior foi substituída.");
+    }
+    if (code === 'auth/popup-blocked' || msg.includes('popup-blocked')) {
+      console.warn("Pop-up bloqueado pelo navegador.");
+      throw new Error("POPUP_BLOCKED");
+    }
+    if (code === 'auth/popup-closed-by-user' || msg.includes('popup-closed-by-user')) {
+      console.warn("Pop-up fechado pelo usuário.");
+      throw new Error("POPUP_CLOSED");
+    }
+    if (code === 'auth/unauthorized-domain' || msg.includes('unauthorized-domain')) {
+      console.error("Domínio não autorizado no Firebase Auth:", window.location.hostname);
+      throw new Error(`O domínio '${window.location.hostname}' não está autorizado no Console do Firebase.`);
+    }
+
     console.error("Google Sign In Error:", error);
     throw error;
+  } finally {
+    // Brief delay before releasing lock to ensure Firebase internal state resets
+    setTimeout(() => {
+      isAuthInProgress = false;
+    }, 500);
   }
 }
 

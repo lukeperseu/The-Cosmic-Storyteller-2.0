@@ -172,31 +172,31 @@
   <canvas id="bg-canvas" class="fixed inset-0 pointer-events-none z-0"></canvas>
 
   <!-- APP CONTENT CONTAINER -->
-  <div class="relative z-10 flex flex-col min-h-screen">
+  <div id="app-root-container" class="relative z-10 flex flex-col min-h-screen">
 
     <!-- TOP NAVIGATION BAR -->
-    <header class="glass-nav sticky top-0 z-40 px-4 py-3 sm:px-8">
-      <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+    <header id="top-nav-bar" class="glass-nav sticky top-0 z-40 px-3 py-2 sm:px-6 sm:py-3 shrink-0">
+      <div class="max-w-7xl mx-auto flex items-center justify-between gap-2">
         
         <!-- Left Side: Hamburger & User Profile Badge -->
-        <div class="flex items-center space-x-3 sm:space-x-5">
+        <div class="flex items-center space-x-2 sm:space-x-4 min-w-0">
           <!-- Hamburger Button -->
-          <button id="btn-hamburger" onclick="toggleSidebarMenu()" class="p-2.5 rounded-lg bg-cosmic-800/80 text-purple-300 hover:text-white hover:bg-cosmic-700 border border-purple-500/30 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500" title="Menu Lateral">
-            <i data-lucide="menu" class="w-5 h-5"></i>
+          <button id="btn-hamburger" onclick="toggleSidebarMenu()" class="p-2 sm:p-2.5 rounded-lg bg-cosmic-800/80 text-purple-300 hover:text-white hover:bg-cosmic-700 border border-purple-500/30 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 shrink-0" title="Menu Lateral">
+            <i data-lucide="menu" class="w-4 h-4 sm:w-5 sm:h-5"></i>
           </button>
 
           <!-- User Profile Badge -->
-          <button onclick="openModal('account-modal')" class="flex items-center space-x-3 bg-cosmic-900/90 hover:bg-cosmic-800 border border-purple-500/40 px-3 py-1.5 rounded-full shadow-inner transition-all group text-left">
+          <button onclick="openModal('account-modal')" class="flex items-center space-x-2 sm:space-x-3 bg-cosmic-900/90 hover:bg-cosmic-800 border border-purple-500/40 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-inner transition-all group text-left min-w-0">
             <!-- Avatar with Status Dot -->
-            <div class="relative">
-              <img id="header-avatar-img" src="https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg" alt="Avatar" class="w-8 h-8 rounded-full object-cover border border-purple-400/50 shadow-md">
-              <span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 border-2 border-cosmic-950 rounded-full animate-pulse-glow" title="Status: Online"></span>
+            <div class="relative shrink-0">
+              <img id="header-avatar-img" src="https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg" alt="Avatar" class="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover border border-purple-400/50 shadow-md">
+              <span class="absolute bottom-0 right-0 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-emerald-400 border-2 border-cosmic-950 rounded-full animate-pulse-glow" title="Status: Online"></span>
             </div>
 
             <!-- Username & Role Tag -->
-            <div class="flex items-center space-x-2">
-              <span id="header-username" class="font-semibold text-sm text-slate-100 tracking-wide font-rajdhani group-hover:text-purple-300">testador</span>
-              <span class="bg-purple-950/80 text-purple-300 border border-purple-500/40 text-[10px] font-bold font-orbitron px-2 py-0.5 rounded-md tracking-wider">
+            <div class="flex items-center space-x-1.5 min-w-0">
+              <span id="header-username" class="font-semibold text-xs sm:text-sm text-slate-100 tracking-wide font-rajdhani group-hover:text-purple-300 truncate max-w-[90px] sm:max-w-[130px] md:max-w-none">testador</span>
+              <span class="bg-purple-950/80 text-purple-300 border border-purple-500/40 text-[9px] sm:text-[10px] font-bold font-orbitron px-1.5 sm:px-2 py-0.5 rounded-md tracking-wider shrink-0">
                 JOGADOR
               </span>
             </div>
@@ -204,29 +204,31 @@
         </div>
 
         <!-- Right Side: Action Buttons -->
-        <div class="flex items-center flex-wrap gap-2 sm:gap-3">
+        <div class="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           <!-- Chat Global -->
-          <button onclick="openModal('chat-global-modal')" class="btn-purple-neon text-purple-100 font-rajdhani font-semibold text-sm px-3.5 py-1.5 rounded-lg flex items-center space-x-2">
-            <i data-lucide="globe" class="w-4 h-4 text-purple-300"></i>
-            <span>Chat Global</span>
+          <button onclick="openModal('chat-global-modal')" class="btn-purple-neon text-purple-100 font-rajdhani font-semibold text-xs sm:text-sm px-2.5 sm:px-3.5 py-1.5 rounded-lg flex items-center space-x-1.5" title="Abrir Chat Global">
+            <i data-lucide="globe" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-300"></i>
+            <span class="hidden sm:inline">Chat Global</span>
+            <span class="sm:hidden text-xs">Chat</span>
           </button>
 
           <!-- ChatBot -->
-          <button onclick="openModal('chatbot-modal')" class="btn-amber-neon text-amber-100 font-rajdhani font-semibold text-sm px-3.5 py-1.5 rounded-lg flex items-center space-x-2">
-            <i data-lucide="bot" class="w-4 h-4 text-amber-300"></i>
-            <span>ChatBot</span>
+          <button onclick="openModal('chatbot-modal')" class="btn-amber-neon text-amber-100 font-rajdhani font-semibold text-xs sm:text-sm px-2.5 sm:px-3.5 py-1.5 rounded-lg flex items-center space-x-1.5" title="Abrir IA ChatBot">
+            <i data-lucide="bot" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300"></i>
+            <span class="hidden sm:inline">ChatBot</span>
+            <span class="sm:hidden text-xs">Bot</span>
           </button>
 
           <!-- Opções Header -->
-          <button onclick="openModal('options-modal')" class="btn-slate-cosmic text-slate-200 font-rajdhani font-semibold text-sm px-3.5 py-1.5 rounded-lg flex items-center space-x-2">
-            <i data-lucide="settings" class="w-4 h-4 text-slate-400"></i>
-            <span class="hidden sm:inline">Opções</span>
+          <button onclick="openModal('options-modal')" class="btn-slate-cosmic text-slate-200 font-rajdhani font-semibold text-xs sm:text-sm p-1.5 sm:px-3.5 sm:py-1.5 rounded-lg flex items-center space-x-1.5" title="Opções e Configurações">
+            <i data-lucide="settings" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400"></i>
+            <span class="hidden md:inline">Opções</span>
           </button>
 
           <!-- Logs -->
-          <button onclick="openModal('logs-modal')" class="btn-slate-cosmic text-slate-200 font-rajdhani font-semibold text-sm px-3.5 py-1.5 rounded-lg flex items-center space-x-2">
-            <i data-lucide="terminal" class="w-4 h-4 text-slate-400"></i>
-            <span>Logs</span>
+          <button onclick="openModal('logs-modal')" class="btn-slate-cosmic text-slate-200 font-rajdhani font-semibold text-xs sm:text-sm px-2 sm:px-3 sm:py-1.5 rounded-lg flex items-center space-x-1" title="Logs do Sistema">
+            <i data-lucide="terminal" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400"></i>
+            <span class="hidden md:inline">Logs</span>
             <span class="text-xs">🖥️</span>
           </button>
         </div>
@@ -399,77 +401,103 @@
     <!-- ==========================================================================
          GAME SCREEN VIEW (TELA DE JOGO / SESSÃO NARRATIVA COM MENUS LATERAIS)
          ========================================================================== -->
-    <section id="game-screen-view" class="flex-1 flex flex-col h-[calc(100vh-65px)] overflow-hidden hidden bg-[#050711] select-none">
+    <section id="game-screen-view" class="flex-1 flex flex-col h-[calc(100vh-56px)] sm:h-[calc(100vh-62px)] max-h-[calc(100vh-56px)] sm:max-h-[calc(100vh-62px)] min-h-0 overflow-hidden hidden bg-[#050711] select-none">
       
       <!-- GAME TOP BAR & USEFUL TOOLS -->
-      <div class="h-14 sm:h-16 px-3 sm:px-5 bg-gradient-to-r from-[#0d1124] via-[#090c19] to-[#0d1124] border-b border-purple-500/30 flex items-center justify-between gap-2 flex-shrink-0 z-30 shadow-lg">
+      <div id="game-top-bar" class="min-h-[50px] sm:h-14 px-2.5 sm:px-5 bg-gradient-to-r from-[#0d1124] via-[#090c19] to-[#0d1124] border-b border-purple-500/30 flex items-center justify-between gap-1.5 sm:gap-3 flex-shrink-0 z-30 shadow-lg relative">
         
         <!-- Left: Return to Hub + Left Sidebar Toggle Button -->
-        <div class="flex items-center space-x-2 sm:space-x-3">
+        <div class="flex items-center space-x-1.5 sm:space-x-2.5 shrink-0">
           <button onclick="window.exitGameSession()" class="p-2 sm:px-3 sm:py-1.5 rounded-lg bg-purple-950/60 hover:bg-purple-900/80 border border-purple-500/40 text-purple-200 hover:text-white font-rajdhani font-bold text-xs sm:text-sm flex items-center space-x-1.5 transition-all shadow-sm" title="Voltar ao Menu Principal">
             <i data-lucide="arrow-left" class="w-4 h-4 text-purple-400"></i>
-            <span class="hidden md:inline">Menu Principal</span>
+            <span class="hidden lg:inline">Menu</span>
           </button>
 
           <!-- Toggle Left Sidebar (Ficha do Personagem) -->
-          <button id="btn-toggle-game-left" onclick="window.toggleGameLeftSidebar()" class="px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-indigo-950/70 hover:bg-indigo-900/80 border border-indigo-500/50 hover:border-indigo-400 text-indigo-200 hover:text-white font-rajdhani font-bold text-xs sm:text-sm flex items-center space-x-2 transition-all shadow-sm">
+          <button id="btn-toggle-game-left" onclick="window.toggleGameLeftSidebar()" class="px-2 sm:px-3 py-1.5 rounded-lg bg-indigo-950/70 hover:bg-indigo-900/80 border border-indigo-500/50 hover:border-indigo-400 text-indigo-200 hover:text-white font-rajdhani font-bold text-xs sm:text-sm flex items-center space-x-1.5 transition-all shadow-sm" title="Abrir Ficha do Personagem">
             <i data-lucide="file-text" class="w-4 h-4 text-indigo-400"></i>
             <span class="hidden sm:inline">Ficha</span>
-            <span id="game-char-name-badge" class="bg-indigo-900 text-indigo-300 text-[10px] font-orbitron px-1.5 py-0.5 rounded max-w-[90px] sm:max-w-[120px] truncate">Personagem</span>
+            <span id="game-char-name-badge" class="bg-indigo-900 text-indigo-300 text-[10px] font-orbitron px-1.5 py-0.5 rounded max-w-[70px] sm:max-w-[110px] truncate">Personagem</span>
           </button>
         </div>
 
         <!-- Center: Campaign Info & System Badge -->
-        <div class="flex flex-col items-center text-center min-w-0 max-w-[32%] sm:max-w-[40%]">
-          <div class="flex items-center space-x-2 truncate">
+        <div class="flex flex-col items-center justify-center text-center min-w-0 px-1 flex-1 max-w-[140px] sm:max-w-[240px] md:max-w-xs">
+          <div class="flex items-center space-x-1.5 max-w-full truncate">
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-            <h2 id="game-session-title" class="font-orbitron font-bold text-xs sm:text-sm text-white tracking-wider truncate">
+            <h2 id="game-session-title" class="font-orbitron font-bold text-xs sm:text-sm text-white tracking-wide truncate">
               Campanha Ativa
             </h2>
           </div>
-          <div class="flex items-center space-x-2 text-[10px] text-purple-300/80 font-rajdhani font-semibold">
-            <span id="game-session-system" class="text-purple-300">Tormenta20</span>
-            <span class="text-slate-500">&bull;</span>
-            <span id="game-session-status" class="text-emerald-400 font-mono">IA Narradora Online</span>
+          <div class="hidden md:flex items-center space-x-1.5 text-[10px] text-purple-300/80 font-rajdhani font-semibold truncate max-w-full">
+            <span id="game-session-system" class="text-purple-300 truncate max-w-[120px]">Tormenta20</span>
+            <span class="text-slate-500">•</span>
+            <span id="game-session-status" class="text-emerald-400 font-mono shrink-0">IA Narradora Online</span>
           </div>
         </div>
 
         <!-- Right: Session Tools Toolbar & Right Sidebar Toggle Button -->
-        <div class="flex items-center space-x-1.5 sm:space-x-2">
+        <div class="flex items-center space-x-1 sm:space-x-2 shrink-0">
           
           <!-- Tool: Rolar Dados -->
           <button onclick="openModal('session-dice-modal')" class="p-2 sm:px-2.5 sm:py-1.5 rounded-lg bg-purple-950/60 hover:bg-purple-900/80 border border-purple-500/40 text-purple-200 hover:text-white font-rajdhani font-bold text-xs flex items-center space-x-1 transition-all" title="Rolar Dados Rápidos">
             <i data-lucide="dice-5" class="w-4 h-4 text-purple-400"></i>
-            <span class="hidden xl:inline">Dados</span>
+            <span class="hidden 2xl:inline">Dados</span>
           </button>
 
           <!-- Tool: Ataque Rápido -->
           <button onclick="window.triggerQuickAttackModal()" class="p-2 sm:px-2.5 sm:py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900/80 border border-red-500/40 text-red-200 hover:text-white font-rajdhani font-bold text-xs flex items-center space-x-1 transition-all" title="Ataque Rápido">
             <i data-lucide="sword" class="w-4 h-4 text-red-400"></i>
-            <span class="hidden xl:inline">Ataque</span>
+            <span class="hidden 2xl:inline">Ataque</span>
           </button>
 
-          <!-- Tool: Consultar Regras -->
-          <button onclick="openModal('session-rules-modal')" class="p-2 sm:px-2.5 sm:py-1.5 rounded-lg bg-amber-950/60 hover:bg-amber-900/80 border border-amber-500/40 text-amber-200 hover:text-white font-rajdhani font-bold text-xs flex items-center space-x-1 transition-all" title="Consulta de Regras & Arquivos">
+          <!-- Tools Desktop: Consultar Regras -->
+          <button onclick="openModal('session-rules-modal')" class="hidden xl:flex p-2 sm:px-2.5 sm:py-1.5 rounded-lg bg-amber-950/60 hover:bg-amber-900/80 border border-amber-500/40 text-amber-200 hover:text-white font-rajdhani font-bold text-xs items-center space-x-1 transition-all" title="Consulta de Regras & Arquivos">
             <i data-lucide="book-open" class="w-4 h-4 text-amber-400"></i>
-            <span class="hidden xl:inline">Regras</span>
+            <span class="hidden 2xl:inline">Regras</span>
           </button>
 
-          <!-- Tool: Anotações -->
-          <button onclick="openModal('session-notes-modal')" class="p-2 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 hover:text-white font-rajdhani font-bold text-xs flex items-center space-x-1 transition-all" title="Bloco de Anotações">
+          <!-- Tools Desktop: Anotações -->
+          <button onclick="openModal('session-notes-modal')" class="hidden xl:flex p-2 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 hover:text-white font-rajdhani font-bold text-xs items-center space-x-1 transition-all" title="Bloco de Anotações">
             <i data-lucide="notebook-pen" class="w-4 h-4 text-slate-400"></i>
-            <span class="hidden xl:inline">Notas</span>
+            <span class="hidden 2xl:inline">Notas</span>
           </button>
 
-          <!-- Tool: Descanso -->
-          <button onclick="openModal('session-rest-modal')" class="p-2 sm:px-2.5 sm:py-1.5 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-200 hover:text-white font-rajdhani font-bold text-xs flex items-center space-x-1 transition-all" title="Descanso Curto / Longo">
+          <!-- Tools Desktop: Descanso -->
+          <button onclick="openModal('session-rest-modal')" class="hidden xl:flex p-2 sm:px-2.5 sm:py-1.5 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-200 hover:text-white font-rajdhani font-bold text-xs items-center space-x-1 transition-all" title="Descanso Curto / Longo">
             <i data-lucide="moon" class="w-4 h-4 text-cyan-400"></i>
-            <span class="hidden xl:inline">Descanso</span>
+            <span class="hidden 2xl:inline">Descanso</span>
           </button>
+
+          <!-- Mobile / Tablet: Dropdown Mais Ações -->
+          <div class="relative xl:hidden">
+            <button id="btn-session-more-tools" onclick="window.toggleSessionMoreToolsMenu()" class="p-2 rounded-lg bg-purple-950/70 hover:bg-purple-900 border border-purple-500/40 text-purple-300 hover:text-white transition-all shadow-sm flex items-center justify-center" title="Mais Opções da Sessão">
+              <i data-lucide="more-horizontal" class="w-4 h-4 text-purple-300"></i>
+            </button>
+            
+            <div id="session-more-tools-menu" class="absolute right-0 top-full mt-2 w-48 bg-[#0c1024] border border-purple-500/40 rounded-xl shadow-2xl p-1.5 space-y-1 z-50 hidden animate-fade-in backdrop-blur-md">
+              <button onclick="openModal('session-rules-modal'); window.toggleSessionMoreToolsMenu(false)" class="w-full text-left px-3 py-2 rounded-lg text-xs font-rajdhani font-bold text-amber-200 hover:bg-amber-950/50 hover:text-white flex items-center space-x-2 transition-colors">
+                <i data-lucide="book-open" class="w-4 h-4 text-amber-400"></i>
+                <span>Consultar Regras</span>
+              </button>
+              <button onclick="openModal('session-notes-modal'); window.toggleSessionMoreToolsMenu(false)" class="w-full text-left px-3 py-2 rounded-lg text-xs font-rajdhani font-bold text-slate-200 hover:bg-slate-800 hover:text-white flex items-center space-x-2 transition-colors">
+                <i data-lucide="notebook-pen" class="w-4 h-4 text-slate-400"></i>
+                <span>Anotações / Notas</span>
+              </button>
+              <button onclick="openModal('session-rest-modal'); window.toggleSessionMoreToolsMenu(false)" class="w-full text-left px-3 py-2 rounded-lg text-xs font-rajdhani font-bold text-cyan-200 hover:bg-cyan-950/50 hover:text-white flex items-center space-x-2 transition-colors">
+                <i data-lucide="moon" class="w-4 h-4 text-cyan-400"></i>
+                <span>Descanso Curto/Longo</span>
+              </button>
+              <button onclick="window.clearSessionChatFeed(); window.toggleSessionMoreToolsMenu(false)" class="w-full text-left px-3 py-2 rounded-lg text-xs font-rajdhani font-bold text-red-300 hover:bg-red-950/50 hover:text-white flex items-center space-x-2 transition-colors border-t border-purple-500/20 pt-1.5 mt-1">
+                <i data-lucide="trash-2" class="w-4 h-4 text-red-400"></i>
+                <span>Limpar Chat Local</span>
+              </button>
+            </div>
+          </div>
 
           <!-- Toggle Right Sidebar (Status & Equipamentos) -->
-          <button id="btn-toggle-game-right" onclick="window.toggleGameRightSidebar()" class="px-2 sm:px-3 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-500/50 hover:border-emerald-400 text-emerald-200 hover:text-white font-rajdhani font-bold text-xs sm:text-sm flex items-center space-x-1.5 transition-all shadow-sm">
-            <i data-lucide="shield" class="w-4 h-4 text-emerald-400"></i>
+          <button id="btn-toggle-game-right" onclick="window.toggleGameRightSidebar()" class="px-2 sm:px-3 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-500/50 hover:border-emerald-400 text-emerald-200 hover:text-white font-rajdhani font-bold text-xs sm:text-sm flex items-center space-x-1 sm:space-x-1.5 transition-all shadow-sm" title="Painel Tático de Status & Equipamentos">
+            <i data-lucide="shield" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400"></i>
             <span class="hidden sm:inline">Status</span>
             <!-- Mini Live PV/PM Tag -->
             <div class="flex items-center space-x-1 text-[10px] font-mono">
@@ -483,17 +511,17 @@
 
       </div>
 
-      <!-- MAIN 3-COLUMN WORKSPACE -->
-      <div class="flex-1 flex relative overflow-hidden select-text">
+      <!-- MAIN 3-COLUMN WORKSPACE (BOUNDED HEIGHT, INDEPENDENT INTERNAL SCROLLING) -->
+      <div class="flex-1 flex min-h-0 h-full max-h-full relative overflow-hidden select-text">
         
         <!-- BACKDROP PARA MOBILE (FECHAR MENU ESQUERDO AO CLICAR FORA) -->
         <div id="game-left-backdrop" onclick="window.closeGameLeftSidebarMobile()" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-30 lg:hidden hidden transition-opacity duration-200"></div>
 
         <!-- ==================== MENU LATERAL ESQUERDO: FICHA DO PERSONAGEM (TEXTO NÃO EDITÁVEL) ==================== -->
-        <aside id="game-left-sidebar" class="w-80 sm:w-88 xl:w-96 bg-[#090d1e] border-r border-purple-500/30 flex flex-col flex-shrink-0 z-40 lg:z-10 absolute lg:static inset-y-0 left-0 transform -translate-x-full lg:translate-x-0 transition-transform duration-300 shadow-2xl lg:shadow-none">
+        <aside id="game-left-sidebar" class="w-[85vw] max-w-[340px] sm:w-88 xl:w-96 bg-[#090d1e] border-r border-purple-500/30 flex flex-col flex-shrink-0 h-full max-h-full min-h-0 z-40 lg:z-10 absolute lg:static inset-y-0 left-0 transform -translate-x-full lg:translate-x-0 transition-transform duration-300 shadow-2xl lg:shadow-none overflow-hidden">
           
-          <!-- Sidebar Header -->
-          <div class="p-3.5 bg-gradient-to-r from-purple-950/90 to-[#0c1024] border-b border-purple-500/30 flex items-center justify-between flex-shrink-0">
+          <!-- 1. Sidebar Header (FIXED) -->
+          <div class="p-3 bg-gradient-to-r from-purple-950/90 to-[#0c1024] border-b border-purple-500/30 flex items-center justify-between flex-shrink-0">
             <div class="flex items-center space-x-2.5 min-w-0">
               <img id="game-sheet-avatar" src="https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg" alt="Avatar" class="w-9 h-9 rounded-full object-cover border border-purple-400/50 shadow shrink-0">
               <div class="min-w-0">
@@ -514,7 +542,7 @@
             </div>
           </div>
 
-          <!-- TABS DE ACESSO INDIVIDUAL ÀS ABAS DA FICHA (HORIZONTALLY SCROLLABLE / WRAPPED) -->
+          <!-- 2. TABS DE ACESSO INDIVIDUAL ÀS ABAS DA FICHA (FIXED BAR) -->
           <div class="p-2 bg-[#060917] border-b border-purple-500/20 flex items-center gap-1.5 overflow-x-auto scrollbar-thin scrollbar-thumb-purple-900 scrollbar-track-transparent flex-shrink-0">
             <button onclick="window.setGameSheetTab('cabecalho')" id="tab-btn-cabecalho" class="game-sheet-tab-btn active px-2.5 py-1 rounded-md text-xs font-rajdhani font-bold whitespace-nowrap transition-all bg-purple-600 text-white shadow-sm flex items-center space-x-1">
               <span>👤</span>
@@ -562,35 +590,34 @@
             </button>
           </div>
 
-          <!-- ÁREA DE EXIBIÇÃO: TEXTO NÃO EDITÁVEL DA ABA ATIVA -->
-          <div class="flex-1 overflow-y-auto p-4 space-y-4 bg-[#090d1e]/80 scrollbar-thin scrollbar-thumb-purple-900/70 scrollbar-track-transparent">
-            
-            <div class="flex items-center justify-between pb-2 border-b border-purple-500/20 text-xs text-purple-300 font-rajdhani font-semibold">
-              <span id="game-sheet-tab-title" class="uppercase tracking-wider font-bold text-white">Cabeçalho & Biografia</span>
-              <button onclick="window.copyCurrentTabContent()" class="text-[11px] text-purple-400 hover:text-white flex items-center space-x-1 bg-purple-950/60 px-2 py-0.5 rounded border border-purple-500/30 transition-colors">
-                <i data-lucide="copy" class="w-3 h-3"></i>
-                <span>Copiar</span>
-              </button>
-            </div>
+          <!-- 3. TAB TITLE & COPY ACTION BAR (FIXED) -->
+          <div class="px-3.5 py-2 bg-[#080c1d] border-b border-purple-500/20 flex items-center justify-between text-xs text-purple-300 font-rajdhani font-semibold flex-shrink-0">
+            <span id="game-sheet-tab-title" class="uppercase tracking-wider font-bold text-white truncate max-w-[200px]">Cabeçalho & Biografia</span>
+            <button onclick="window.copyCurrentTabContent()" class="text-[11px] text-purple-400 hover:text-white flex items-center space-x-1 bg-purple-950/60 px-2 py-0.5 rounded border border-purple-500/30 transition-colors shrink-0">
+              <i data-lucide="copy" class="w-3 h-3"></i>
+              <span>Copiar</span>
+            </button>
+          </div>
 
+          <!-- 4. ÁREA DE EXIBIÇÃO: TEXTO NÃO EDITÁVEL DA ABA ATIVA (ONLY THIS SCROLLS) -->
+          <div class="flex-1 min-h-0 overflow-y-auto p-3.5 space-y-3 bg-[#090d1e]/80 scrollbar-thin scrollbar-thumb-purple-900/70 scrollbar-track-transparent">
             <!-- Content Container populated via auth-app.ts in strictly Read-Only non-editable text cards -->
             <div id="game-sheet-tab-display" class="space-y-3 font-rajdhani text-xs">
               <!-- Populated dynamically -->
             </div>
-
           </div>
 
-          <!-- Left Sidebar Footer / Roll Action Info -->
-          <div class="p-2.5 bg-[#070a18] border-t border-purple-500/20 text-center flex items-center justify-between text-[11px] text-slate-400 font-rajdhani">
-            <span>💡 Dica: Clique nos atributos e perícias para rolar direto no chat!</span>
+          <!-- 5. Left Sidebar Footer / Roll Action Info (FIXED) -->
+          <div class="p-2.5 bg-[#070a18] border-t border-purple-500/20 text-center flex items-center justify-between text-[11px] text-slate-400 font-rajdhani flex-shrink-0">
+            <span class="truncate">💡 Clique nos atributos e perícias para rolar!</span>
           </div>
 
         </aside>
 
         <!-- ==================== CENTRO: CHAT NARRATIVO & DECK DE COMANDOS ==================== -->
-        <section id="game-center-chat" class="flex-1 flex flex-col min-w-0 bg-[#060814]/95 relative">
+        <section id="game-center-chat" class="flex-1 flex flex-col h-full max-h-full min-h-0 min-w-0 bg-[#060814]/95 relative overflow-hidden">
           
-          <!-- CHAT HEADER & LOG CONTROLS -->
+          <!-- 1. CHAT HEADER & LOG CONTROLS (FIXED) -->
           <div class="px-4 py-2 bg-[#080c1d]/90 border-b border-purple-500/20 flex items-center justify-between text-xs font-rajdhani flex-shrink-0">
             <div class="flex items-center space-x-2">
               <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
@@ -613,42 +640,42 @@
             </div>
           </div>
 
-          <!-- MESSAGES FEED (AUTOSCROLLING CHAT) -->
-          <div id="game-messages-feed" class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 scrollbar-thin scrollbar-thumb-purple-900/60 scrollbar-track-transparent">
+          <!-- 2. MESSAGES FEED (AUTOSCROLLING CHAT - ONLY THIS SCROLLS) -->
+          <div id="game-messages-feed" class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4 scrollbar-thin scrollbar-thumb-purple-900/60 scrollbar-track-transparent">
             <!-- Messages populated dynamically -->
           </div>
 
-          <!-- INPUT DE COMANDO & AÇÃO -->
+          <!-- 3. INPUT DE COMANDO & AÇÃO (FIXED FOOTER) -->
           <div class="p-3 sm:p-4 bg-[#090d20] border-t border-purple-500/30 flex-shrink-0 space-y-2.5 shadow-2xl">
             
             <!-- Action Mode Selector & Quick Tools -->
             <div class="flex flex-wrap items-center justify-between gap-2">
-              <div class="flex items-center space-x-1.5">
-                <span class="text-[11px] font-bold text-purple-300/80 font-rajdhani uppercase">Modo:</span>
+              <div class="flex items-center gap-1.5 overflow-x-auto pb-0.5 max-w-full scrollbar-none">
+                <span class="text-[11px] font-bold text-purple-300/80 font-rajdhani uppercase shrink-0">Modo:</span>
                 
-                <button type="button" onclick="window.setSessionActionMode('speech')" id="action-mode-speech" class="action-mode-btn active px-2.5 py-1 rounded text-xs font-rajdhani font-bold bg-purple-600 text-white transition-all flex items-center space-x-1">
+                <button type="button" onclick="window.setSessionActionMode('speech')" id="action-mode-speech" class="action-mode-btn active px-2.5 py-1 rounded text-xs font-rajdhani font-bold bg-purple-600 text-white transition-all flex items-center space-x-1 shrink-0">
                   <span>🗣️</span>
                   <span>Falar</span>
                 </button>
 
-                <button type="button" onclick="window.setSessionActionMode('action')" id="action-mode-action" class="action-mode-btn px-2.5 py-1 rounded text-xs font-rajdhani font-bold bg-purple-950 text-slate-300 hover:text-white border border-purple-500/30 transition-all flex items-center space-x-1">
+                <button type="button" onclick="window.setSessionActionMode('action')" id="action-mode-action" class="action-mode-btn px-2.5 py-1 rounded text-xs font-rajdhani font-bold bg-purple-950 text-slate-300 hover:text-white border border-purple-500/30 transition-all flex items-center space-x-1 shrink-0">
                   <span>⚔️</span>
                   <span>Agir</span>
                 </button>
 
-                <button type="button" onclick="window.setSessionActionMode('thought')" id="action-mode-thought" class="action-mode-btn px-2.5 py-1 rounded text-xs font-rajdhani font-bold bg-purple-950 text-slate-300 hover:text-white border border-purple-500/30 transition-all flex items-center space-x-1">
+                <button type="button" onclick="window.setSessionActionMode('thought')" id="action-mode-thought" class="action-mode-btn px-2.5 py-1 rounded text-xs font-rajdhani font-bold bg-purple-950 text-slate-300 hover:text-white border border-purple-500/30 transition-all flex items-center space-x-1 shrink-0">
                   <span>💭</span>
                   <span>Pensar</span>
                 </button>
 
-                <button type="button" onclick="window.setSessionActionMode('narrator')" id="action-mode-narrator" class="action-mode-btn px-2.5 py-1 rounded text-xs font-rajdhani font-bold bg-purple-950 text-slate-300 hover:text-white border border-purple-500/30 transition-all flex items-center space-x-1">
+                <button type="button" onclick="window.setSessionActionMode('narrator')" id="action-mode-narrator" class="action-mode-btn px-2.5 py-1 rounded text-xs font-rajdhani font-bold bg-purple-950 text-slate-300 hover:text-white border border-purple-500/30 transition-all flex items-center space-x-1 shrink-0">
                   <span>📜</span>
                   <span>Narrar / IA</span>
                 </button>
               </div>
 
               <div class="text-[11px] text-slate-400 font-rajdhani hidden sm:block">
-                <span>Pressione <strong>Enter</strong> para enviar &bull; <strong>Shift+Enter</strong> para nova linha</span>
+                <span>Pressione <strong>Enter</strong> para enviar • <strong>Shift+Enter</strong> para nova linha</span>
               </div>
             </div>
 
@@ -660,14 +687,14 @@
                   rows="2"
                   placeholder="Descreva a ação do seu personagem, diálogo ou comando..."
                   onkeydown="window.handleChatInputKeydown(event)"
-                  class="w-full bg-[#050714] border border-purple-500/40 focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 rounded-xl p-3 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none resize-none font-rajdhani leading-relaxed shadow-inner"
+                  class="w-full bg-[#050714] border border-purple-500/40 focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 rounded-xl p-2.5 sm:p-3 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none resize-none font-rajdhani leading-relaxed shadow-inner"
                 ></textarea>
               </div>
 
               <button 
                 type="submit" 
                 id="game-chat-send-btn"
-                class="btn-purple-neon px-4 py-3 rounded-xl text-white font-rajdhani font-bold text-sm flex items-center justify-center space-x-1.5 shrink-0 shadow-lg h-[54px]"
+                class="btn-purple-neon px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl text-white font-rajdhani font-bold text-sm flex items-center justify-center space-x-1.5 shrink-0 shadow-lg h-[46px] sm:h-[54px]"
               >
                 <i data-lucide="send" class="w-4 h-4 text-purple-200"></i>
                 <span class="hidden sm:inline">Enviar</span>
@@ -682,10 +709,10 @@
         <div id="game-right-backdrop" onclick="window.closeGameRightSidebarMobile()" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-30 lg:hidden hidden transition-opacity duration-200"></div>
 
         <!-- ==================== MENU LATERAL DIREITO: MINI CABEÇALHO, ARMAS, ARMADURAS, CONSUMÍVEIS ==================== -->
-        <aside id="game-right-sidebar" class="w-80 sm:w-88 xl:w-96 bg-[#090d1e] border-l border-purple-500/30 flex flex-col flex-shrink-0 z-40 lg:z-10 absolute lg:static inset-y-0 right-0 transform translate-x-full lg:translate-x-0 transition-transform duration-300 shadow-2xl lg:shadow-none">
+        <aside id="game-right-sidebar" class="w-[85vw] max-w-[340px] sm:w-88 xl:w-96 bg-[#090d1e] border-l border-purple-500/30 flex flex-col flex-shrink-0 h-full max-h-full min-h-0 z-40 lg:z-10 absolute lg:static inset-y-0 right-0 transform translate-x-full lg:translate-x-0 transition-transform duration-300 shadow-2xl lg:shadow-none overflow-hidden">
           
-          <!-- Right Sidebar Header -->
-          <div class="p-3.5 bg-gradient-to-r from-[#0c1024] to-emerald-950/80 border-b border-purple-500/30 flex items-center justify-between flex-shrink-0">
+          <!-- 1. Right Sidebar Header (FIXED) -->
+          <div class="p-3 bg-gradient-to-r from-[#0c1024] to-emerald-950/80 border-b border-purple-500/30 flex items-center justify-between flex-shrink-0">
             <div class="flex items-center space-x-2">
               <div class="p-1.5 rounded-lg bg-emerald-900/60 text-emerald-400 border border-emerald-500/40">
                 <i data-lucide="activity" class="w-4 h-4"></i>
@@ -701,8 +728,8 @@
             </button>
           </div>
 
-          <!-- Scrollable Body for Right Sidebar -->
-          <div class="flex-1 overflow-y-auto p-3.5 space-y-4 scrollbar-thin scrollbar-thumb-purple-900/70 scrollbar-track-transparent">
+          <!-- 2. Scrollable Body for Right Sidebar (ONLY THIS SCROLLS) -->
+          <div class="flex-1 min-h-0 overflow-y-auto p-3.5 space-y-4 scrollbar-thin scrollbar-thumb-purple-900/70 scrollbar-track-transparent">
             
             <!-- 1. MINI CABEÇALHO COM PV E PM ATUAIS -->
             <div class="bg-[#0b0f22] border border-purple-500/30 rounded-xl p-3.5 space-y-3.5 shadow-md">
@@ -1222,6 +1249,13 @@
           <button id="account-logout-btn" onclick="handleGoogleLogout()" class="w-full py-2.5 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-600/60 text-white font-rajdhani font-bold text-sm tracking-widest flex items-center justify-center space-x-2 transition-all shadow-md hidden">
             <span>📜 SAIR DA CONTA GOOGLE</span>
           </button>
+
+          <!-- Tip for Iframe environments / Pop-ups -->
+          <div class="pt-2 text-center">
+            <a href="." target="_blank" class="text-[11px] text-cyan-300/80 hover:text-cyan-200 underline font-rajdhani flex items-center justify-center space-x-1">
+              <span>↗️ Abrir app em nova aba</span>
+            </a>
+          </div>
         </div>
 
       </div>
