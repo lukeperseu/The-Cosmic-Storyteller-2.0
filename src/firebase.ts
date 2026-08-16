@@ -264,6 +264,7 @@ export interface CharacterData {
   system: string;
   name: string;
   playerName: string;
+  profilePictureUrl?: string;
   race: string;
   origin: string;
   divinity: string;

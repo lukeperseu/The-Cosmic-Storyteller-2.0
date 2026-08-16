@@ -211,6 +211,8 @@ declare global {
     filterRulesSearch: (query: string) => void;
     clearSessionChatFeed: () => void;
     renderSessionMessages: (messages: SessionMessage[]) => void;
+    updateCharPhotoPreview: (url?: string) => void;
+    testCharPhotoUrl: () => void;
   }
 }
 
@@ -225,6 +227,19 @@ function escapeHtml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+/**
+ * Utility helper to safely escape strings for inline JavaScript calls and attributes
+ */
+function escapeJsString(str: string): string {
+  if (!str) return '';
+  return String(str)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 /**
@@ -663,6 +678,13 @@ onAuthStateChanged(auth, async (user) => {
     updateAppUIWithProfile(null, null);
     sendPresenceHeartbeat(true);
   }
+
+  // Refresh user-specific campaign counts and list if opened
+  updateCampaignsCountUI();
+  const carregarModal = document.getElementById('carregar-campanha-modal');
+  if (carregarModal && !carregarModal.classList.contains('hidden')) {
+    window.renderCampaignsListUI();
+  }
 });
 
 /**
@@ -883,6 +905,7 @@ window.saveCharacterUI = async function() {
       system: getValue('char-system'),
       name: getValue('char-name') || 'Herói Sem Nome',
       playerName: getValue('char-player'),
+      profilePictureUrl: getValue('char-photo-url'),
       race: getValue('char-race'),
       origin: getValue('char-origin'),
       divinity: getValue('char-divinity'),
@@ -995,13 +1018,17 @@ window.openPersonagensModal = async function() {
           : `${char.class1} ${char.class1Level || 1}`;
       }
       
+      const avatarHtml = char.profilePictureUrl
+        ? `<img src="${char.profilePictureUrl}" alt="${char.name}" class="w-10 h-10 rounded-lg object-cover border border-purple-500/40" onerror="this.outerHTML='<div class=\\'w-10 h-10 rounded-lg bg-[#1e2336] flex items-center justify-center font-orbitron font-bold text-indigo-300 text-lg\\'>${initial}</div>'">`
+        : `<div class="w-10 h-10 rounded-lg bg-[#1e2336] flex items-center justify-center font-orbitron font-bold text-indigo-300 text-lg">${initial}</div>`;
+
       return `
         <div class="bg-[#0b0f19] border border-[#1e2336] p-3.5 rounded-xl flex items-center justify-between hover:border-indigo-500/30 transition-colors">
           <div class="flex items-center space-x-3">
-            <div class="w-10 h-10 rounded-lg bg-[#1e2336] flex items-center justify-center font-orbitron font-bold text-indigo-300 text-lg">${initial}</div>
+            ${avatarHtml}
             <div>
               <h4 class="font-rajdhani font-bold text-base text-white">${char.name}</h4>
-              <p class="text-xs text-indigo-300">${charClass} &bull; Nível ${level} &bull; HP: --/--</p>
+              <p class="text-xs text-indigo-300">${charClass} &bull; Nível ${level} &bull; HP: ${char.pvAtual ?? '--'}/${char.pvMax ?? '--'}</p>
             </div>
           </div>
           <div class="flex items-center space-x-2">
@@ -1051,6 +1078,10 @@ window.editCharacter = function(charId: string) {
   setValue('char-system', char.system);
   setValue('char-name', char.name);
   setValue('char-player', char.playerName);
+  setValue('char-photo-url', char.profilePictureUrl || '');
+  if (window.updateCharPhotoPreview) {
+    window.updateCharPhotoPreview(char.profilePictureUrl || '');
+  }
   setValue('char-race', char.race);
   setValue('char-origin', char.origin);
   setValue('char-divinity', char.divinity);
@@ -1164,6 +1195,10 @@ window.resetCharacterForm = function() {
   clearValue('char-system', 'Tormenta20 (Nativo)');
   clearValue('char-name');
   clearValue('char-player');
+  clearValue('char-photo-url');
+  if (window.updateCharPhotoPreview) {
+    window.updateCharPhotoPreview('');
+  }
   clearValue('char-race');
   clearValue('char-origin');
   clearValue('char-divinity');
@@ -1229,6 +1264,37 @@ window.resetCharacterForm = function() {
   clearValue('char-likes-other');
   window.characterEpisodes = [];
   if (window.renderEpisodes) window.renderEpisodes();
+};
+
+/**
+ * Updates character photo preview thumbnail in the creation/editing modal
+ */
+window.updateCharPhotoPreview = function(url?: string) {
+  const previewImg = document.getElementById('char-photo-preview') as HTMLImageElement | null;
+  const defaultFallback = 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg';
+  if (!previewImg) return;
+  const input = document.getElementById('char-photo-url') as HTMLInputElement | null;
+  const targetUrl = url !== undefined ? url : (input?.value || '');
+  const cleanUrl = targetUrl.trim();
+  if (cleanUrl) {
+    previewImg.src = cleanUrl;
+  } else {
+    previewImg.src = defaultFallback;
+  }
+};
+
+/**
+ * Validates and alerts preview status for the character photo URL
+ */
+window.testCharPhotoUrl = function() {
+  const input = document.getElementById('char-photo-url') as HTMLInputElement | null;
+  const url = input?.value?.trim();
+  if (!url) {
+    if (window.showToast) window.showToast('Informe a URL da imagem antes de testar.', 'info');
+    return;
+  }
+  window.updateCharPhotoPreview(url);
+  if (window.showToast) window.showToast('🖼️ Pré-visualização da foto atualizada!', 'success');
 };
 
 // Initialize attributes
@@ -4704,13 +4770,18 @@ subscribeToCampaigns((campaigns) => {
 });
 
 function updateCampaignsCountUI() {
+  const myUid = currentGoogleUser?.uid;
+  const userCampaigns = myUid 
+    ? (window.allCampaigns || []).filter(c => c.createdBy === myUid)
+    : [];
+
   const globalCountEl = document.getElementById('campanhas-globais-count');
   if (globalCountEl) {
-    globalCountEl.innerText = `${window.allCampaigns.length} ${window.allCampaigns.length === 1 ? 'campanha ativa' : 'campanhas ativas'}`;
+    globalCountEl.innerText = `${userCampaigns.length} ${userCampaigns.length === 1 ? 'campanha sua' : 'campanhas suas'}`;
   }
   const badgeEl = document.getElementById('total-campaigns-badge');
   if (badgeEl) {
-    badgeEl.innerText = `${window.allCampaigns.length} ${window.allCampaigns.length === 1 ? 'campanha salva' : 'campanhas salvas'}`;
+    badgeEl.innerText = `${userCampaigns.length} ${userCampaigns.length === 1 ? 'campanha salva' : 'campanhas salvas'}`;
   }
 }
 
@@ -4783,36 +4854,60 @@ window.filterCampaignsList = function(query: string) {
 };
 
 /**
- * Renders the saved campaigns list into #campaigns-saved-list
+ * Renders the saved campaigns list into #campaigns-saved-list (exclusive to current account)
  */
 window.renderCampaignsListUI = function() {
   const container = document.getElementById('campaigns-saved-list');
   if (!container) return;
 
-  const all = window.allCampaigns || [];
+  const myUid = currentGoogleUser?.uid;
+  if (!myUid) {
+    container.innerHTML = `
+      <div class="h-80 flex flex-col items-center justify-center text-center p-6 border border-dashed border-cyan-500/30 rounded-2xl bg-cosmic-950/60 text-slate-300">
+        <div class="w-16 h-16 rounded-2xl bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center text-3xl mb-3 shadow-lg shadow-cyan-950/50">
+          🔐
+        </div>
+        <h4 class="font-orbitron font-bold text-base text-white">Faça Login para Acessar Suas Campanhas</h4>
+        <p class="text-xs text-slate-400 font-rajdhani max-w-md mt-1 mb-5 leading-relaxed">
+          Suas campanhas são exclusivas da sua conta Google e salvas com segurança no Firebase Firestore. Conecte-se para carregar ou iniciar suas jornadas!
+        </p>
+        <button 
+          type="button" 
+          onclick="window.handleGoogleLogin()" 
+          class="btn-purple-neon px-6 py-2.5 rounded-xl text-xs font-bold font-orbitron text-white flex items-center space-x-2 shadow-neon-purple hover:scale-105 transition-transform"
+        >
+          <span>🌐</span>
+          <span>ENTRAR COM GOOGLE</span>
+        </button>
+      </div>
+    `;
+    const badgeEl = document.getElementById('total-campaigns-badge');
+    if (badgeEl) badgeEl.innerText = '0 campanhas salvas';
+    return;
+  }
+
+  // Filter ONLY campaigns owned by the current logged-in user
+  const userCampaigns = (window.allCampaigns || []).filter((camp) => camp.createdBy === myUid);
   const filter = window.activeCampaignFilter || 'all';
   const query = (window.campaignSearchQuery || '').toLowerCase();
 
   // Apply filters
-  let filtered = all.filter((camp) => {
+  let filtered = userCampaigns.filter((camp) => {
     // Category filter
-    if (filter === 'mine') {
-      const myUid = currentGoogleUser?.uid;
-      if (myUid && camp.createdBy !== myUid) return false;
-    } else if (filter !== 'all') {
+    if (filter !== 'all' && filter !== 'mine') {
       if (!doesCharacterMatchSystem(camp.system, filter)) return false;
     }
 
     // Search query filter
     if (query) {
-      const matchName = camp.name.toLowerCase().includes(query);
-      const matchSystem = camp.system.toLowerCase().includes(query);
-      const matchChar = camp.characterName?.toLowerCase().includes(query) || false;
-      const matchCreator = camp.createdByName?.toLowerCase().includes(query) || false;
-      const matchVersion = camp.systemVersion?.toLowerCase().includes(query) || false;
-      const matchSysFile = camp.systemFileName?.toLowerCase().includes(query) || false;
-      const matchWorldFile = camp.worldFileName?.toLowerCase().includes(query) || false;
-      const matchLoreFile = camp.loreFileName?.toLowerCase().includes(query) || false;
+      const matchName = (camp.name || '').toLowerCase().includes(query);
+      const matchSystem = (camp.system || '').toLowerCase().includes(query);
+      const matchChar = (camp.characterName || '').toLowerCase().includes(query);
+      const matchCreator = (camp.createdByName || '').toLowerCase().includes(query);
+      const matchVersion = (camp.systemVersion || '').toLowerCase().includes(query);
+      const matchSysFile = (camp.systemFileName || '').toLowerCase().includes(query);
+      const matchWorldFile = (camp.worldFileName || '').toLowerCase().includes(query);
+      const matchLoreFile = (camp.loreFileName || '').toLowerCase().includes(query);
 
       if (!matchName && !matchSystem && !matchChar && !matchCreator && !matchVersion && !matchSysFile && !matchWorldFile && !matchLoreFile) {
         return false;
@@ -4825,23 +4920,23 @@ window.renderCampaignsListUI = function() {
   // Update badge count
   const badgeEl = document.getElementById('total-campaigns-badge');
   if (badgeEl) {
-    badgeEl.innerText = `${filtered.length} ${filtered.length === 1 ? 'campanha' : 'campanhas'}${query || filter !== 'all' ? ` (de ${all.length})` : ''}`;
+    badgeEl.innerText = `${filtered.length} ${filtered.length === 1 ? 'campanha sua' : 'campanhas suas'}${query || (filter !== 'all' && filter !== 'mine') ? ` (de ${userCampaigns.length})` : ''}`;
   }
 
   // If no campaigns
   if (filtered.length === 0) {
-    if (all.length === 0) {
+    if (userCampaigns.length === 0) {
       container.innerHTML = `
         <div class="h-80 flex flex-col items-center justify-center text-center p-6 border border-dashed border-cyan-500/30 rounded-2xl bg-cosmic-950/60 text-slate-300">
           <div class="w-16 h-16 rounded-2xl bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center text-3xl mb-3 shadow-lg shadow-cyan-950/50">
             📂
           </div>
-          <h4 class="font-orbitron font-bold text-base text-white">Nenhuma campanha criada ainda</h4>
+          <h4 class="font-orbitron font-bold text-base text-white">Nenhuma campanha criada na sua conta</h4>
           <p class="text-xs text-slate-400 font-rajdhani max-w-md mt-1 mb-5 leading-relaxed">
-            Você ainda não possui campanhas salvas no Firebase Firestore. Crie sua primeira campanha vinculando um personagem e sistema de regras para começar!
+            Você ainda não possui campanhas salvas na sua conta do Firebase Firestore. Crie sua primeira campanha vinculando um personagem e sistema de regras para começar!
           </p>
           <button 
-            type="button"
+            type="button" 
             onclick="window.closeCarregarCampanhaModal(); window.openNovaCampanhaModal()" 
             class="btn-purple-neon px-6 py-2.5 rounded-xl text-xs font-bold font-orbitron text-white flex items-center space-x-2 shadow-neon-purple hover:scale-105 transition-transform"
           >
@@ -4856,10 +4951,10 @@ window.renderCampaignsListUI = function() {
           <span class="text-3xl mb-2">🔍</span>
           <h4 class="font-orbitron font-bold text-sm text-slate-200">Nenhuma campanha encontrada</h4>
           <p class="text-xs text-slate-400 font-rajdhani mt-1 max-w-sm">
-            Nenhum resultado corresponde aos filtros selecionados. Tente buscar por outro termo ou limpar os filtros.
+            Nenhum resultado corresponde aos filtros selecionados nas suas campanhas. Tente buscar por outro termo ou limpar os filtros.
           </p>
           <button 
-            type="button"
+            type="button" 
             onclick="window.setCampaignFilter('all'); const input = document.getElementById('search-campaigns-input'); if (input) input.value = ''; window.filterCampaignsList('');" 
             class="mt-3 text-xs text-cyan-300 hover:text-white bg-cyan-950/60 border border-cyan-500/30 px-3 py-1.5 rounded-lg transition-colors"
           >
@@ -4903,11 +4998,11 @@ window.renderCampaignsListUI = function() {
               <div class="flex items-center space-x-2 mb-1 flex-wrap gap-y-1">
                 <span class="bg-emerald-950/90 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold font-orbitron px-2 py-0.5 rounded-md inline-flex items-center space-x-1">
                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse mr-1"></span>
-                  <span>ATIVA</span>
+                  <span>SUA CAMPANHA</span>
                 </span>
 
                 <span class="bg-purple-950/80 text-purple-200 border border-purple-500/30 text-[10px] font-bold font-rajdhani px-2 py-0.5 rounded-md">
-                  ⚡ ${camp.system} ${camp.systemVersion ? `(${camp.systemVersion})` : ''}
+                  ⚡ ${escapeHtml(camp.system || 'RPG')} ${camp.systemVersion ? `(${escapeHtml(camp.systemVersion)})` : ''}
                 </span>
 
                 ${isCurrentActive ? `
@@ -4917,14 +5012,14 @@ window.renderCampaignsListUI = function() {
                 ` : ''}
               </div>
 
-              <h4 class="font-orbitron font-extrabold text-base sm:text-lg text-white group-hover:text-cyan-200 transition-colors truncate" title="${camp.name}">
-                ${camp.name}
+              <h4 class="font-orbitron font-extrabold text-base sm:text-lg text-white group-hover:text-cyan-200 transition-colors truncate" title="${escapeHtml(camp.name)}">
+                ${escapeHtml(camp.name)}
               </h4>
             </div>
 
             <div class="text-right flex-shrink-0">
               <span class="text-[10px] text-slate-400 font-rajdhani block">
-                @${camp.createdByName || 'Aventureiro'}
+                @${escapeHtml(camp.createdByName || 'Você')}
               </span>
               <span class="text-[9px] text-slate-500 font-mono block">
                 ${dateFormatted}
@@ -4936,15 +5031,15 @@ window.renderCampaignsListUI = function() {
           <div class="bg-cosmic-950/90 border border-purple-500/20 rounded-xl p-3 flex items-center justify-between gap-3 shadow-inner">
             <div class="flex items-center space-x-3 min-w-0">
               <div class="w-10 h-10 rounded-xl bg-purple-950/90 border border-purple-500/50 flex items-center justify-center font-orbitron font-bold text-sm text-purple-200 flex-shrink-0 shadow-md">
-                ${initial}
+                ${escapeHtml(initial)}
               </div>
               <div class="min-w-0">
                 <span class="text-[10px] font-bold text-purple-300 uppercase tracking-wider block font-rajdhani">Personagem Vinculado</span>
                 <h5 class="font-rajdhani font-bold text-sm text-white truncate group-hover:text-purple-100">
-                  ${charName}
+                  ${escapeHtml(charName)}
                 </h5>
                 <p class="text-[11px] text-slate-400 font-rajdhani truncate">
-                  ${charClass} • Nível ${charLevel} ${charRace ? `• ${charRace}` : ''}
+                  ${escapeHtml(charClass)} • Nível ${charLevel} ${charRace ? `• ${escapeHtml(charRace)}` : ''}
                 </p>
               </div>
             </div>
@@ -4952,7 +5047,7 @@ window.renderCampaignsListUI = function() {
             <div class="flex-shrink-0 text-right">
               <span class="inline-flex items-center space-x-1 text-[10px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">
                 <span>✓</span>
-                <span>${camp.characterSystem || camp.system}</span>
+                <span>${escapeHtml(camp.characterSystem || camp.system || 'RPG')}</span>
               </span>
             </div>
           </div>
@@ -4962,9 +5057,9 @@ window.renderCampaignsListUI = function() {
             <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block font-rajdhani">Material e Ambientação:</span>
             <div class="flex flex-wrap gap-1.5 text-[11px] font-rajdhani">
               ${camp.systemFileName || camp.systemFileIdentifier ? `
-                <span class="inline-flex items-center space-x-1 bg-purple-950/50 text-purple-200 border border-purple-500/30 px-2 py-0.5 rounded-md max-w-full truncate" title="${camp.systemFileIdentifier || camp.systemFileName}">
+                <span class="inline-flex items-center space-x-1 bg-purple-950/50 text-purple-200 border border-purple-500/30 px-2 py-0.5 rounded-md max-w-full truncate" title="${escapeHtml(camp.systemFileIdentifier || camp.systemFileName)}">
                   <span>⚡</span>
-                  <span class="truncate">${camp.systemFileIdentifier || camp.systemFileName}</span>
+                  <span class="truncate">${escapeHtml(camp.systemFileIdentifier || camp.systemFileName)}</span>
                 </span>
               ` : `
                 <span class="inline-flex items-center space-x-1 bg-cosmic-950 text-slate-400 border border-purple-500/10 px-2 py-0.5 rounded-md">
@@ -4974,16 +5069,16 @@ window.renderCampaignsListUI = function() {
               `}
 
               ${camp.worldFileName || camp.worldFileIdentifier ? `
-                <span class="inline-flex items-center space-x-1 bg-emerald-950/50 text-emerald-200 border border-emerald-500/30 px-2 py-0.5 rounded-md max-w-full truncate" title="${camp.worldFileIdentifier || camp.worldFileName}">
+                <span class="inline-flex items-center space-x-1 bg-emerald-950/50 text-emerald-200 border border-emerald-500/30 px-2 py-0.5 rounded-md max-w-full truncate" title="${escapeHtml(camp.worldFileIdentifier || camp.worldFileName)}">
                   <span>🌍</span>
-                  <span class="truncate">${camp.worldFileIdentifier || camp.worldFileName}</span>
+                  <span class="truncate">${escapeHtml(camp.worldFileIdentifier || camp.worldFileName)}</span>
                 </span>
               ` : ''}
 
               ${camp.loreFileName || camp.loreFileIdentifier ? `
-                <span class="inline-flex items-center space-x-1 bg-amber-950/50 text-amber-200 border border-amber-500/30 px-2 py-0.5 rounded-md max-w-full truncate" title="${camp.loreFileIdentifier || camp.loreFileName}">
+                <span class="inline-flex items-center space-x-1 bg-amber-950/50 text-amber-200 border border-amber-500/30 px-2 py-0.5 rounded-md max-w-full truncate" title="${escapeHtml(camp.loreFileIdentifier || camp.loreFileName)}">
                   <span>📜</span>
-                  <span class="truncate">${camp.loreFileIdentifier || camp.loreFileName}</span>
+                  <span class="truncate">${escapeHtml(camp.loreFileIdentifier || camp.loreFileName)}</span>
                 </span>
               ` : ''}
             </div>
@@ -4994,7 +5089,7 @@ window.renderCampaignsListUI = function() {
         <div class="pt-4 mt-3 border-t border-purple-500/20 flex items-center justify-between gap-2">
           <button 
             type="button" 
-            onclick="window.deleteCampaignUI('${camp.id}', '${(camp.name || '').replace(/'/g, "\\'")}')" 
+            onclick="window.deleteCampaignUI('${escapeJsString(camp.id || '')}', '${escapeJsString(camp.name || '')}')" 
             class="px-3 py-2 rounded-xl bg-red-950/30 hover:bg-red-950 border border-red-500/30 hover:border-red-500 text-red-300 text-xs font-rajdhani font-bold flex items-center space-x-1 transition-all"
             title="Excluir campanha do Firestore"
           >
@@ -5004,7 +5099,7 @@ window.renderCampaignsListUI = function() {
 
           <button 
             type="button" 
-            onclick="window.loadAndContinueCampaign('${camp.id}')" 
+            onclick="window.loadAndContinueCampaign('${escapeJsString(camp.id || '')}')" 
             class="flex-1 sm:flex-initial btn-cyan-neon px-5 py-2 rounded-xl text-xs font-bold font-orbitron text-white flex items-center justify-center space-x-2 shadow-neon-cyan hover:scale-[1.02] transition-all"
           >
             <span>🚀</span>
@@ -5077,20 +5172,23 @@ window.deleteCampaignUI = async function(campaignId: string, campaignName: strin
 };
 
 /**
- * Renders the global campaigns list in #campanhas-globais-modal
+ * Renders the user's active campaigns list in #campanhas-globais-modal
  */
 window.renderGlobalCampaignsListUI = function() {
   const container = document.getElementById('global-campaigns-list');
   if (!container) return;
 
-  const campaigns = window.allCampaigns || [];
+  const myUid = currentGoogleUser?.uid;
+  const userCampaigns = myUid 
+    ? (window.allCampaigns || []).filter(c => c.createdBy === myUid)
+    : [];
 
-  if (campaigns.length === 0) {
+  if (userCampaigns.length === 0) {
     container.innerHTML = `
       <div class="text-center py-8 text-slate-400 text-xs font-rajdhani space-y-2">
-        <p>Nenhuma campanha global ativa no momento.</p>
+        <p>${myUid ? 'Você não possui campanhas salvas na sua conta.' : 'Faça login com sua conta Google para gerenciar suas campanhas.'}</p>
         <button onclick="closeModal('campanhas-globais-modal'); window.openNovaCampanhaModal();" class="text-emerald-400 hover:underline font-bold">
-          + Iniciar Primeira Campanha Global
+          + Iniciar Nova Campanha
         </button>
       </div>
     `;
@@ -5098,21 +5196,21 @@ window.renderGlobalCampaignsListUI = function() {
   }
 
   let html = '';
-  campaigns.forEach((camp) => {
+  userCampaigns.forEach((camp) => {
     html += `
       <div class="bg-cosmic-950 border border-emerald-500/30 p-3.5 rounded-xl flex items-center justify-between group hover:border-emerald-400 transition-all">
         <div class="min-w-0 flex-1 mr-3">
           <div class="flex items-center space-x-2">
-            <h4 class="font-rajdhani font-bold text-base text-white truncate">${camp.name}</h4>
+            <h4 class="font-rajdhani font-bold text-base text-white truncate">${escapeHtml(camp.name)}</h4>
             <span class="text-[10px] font-bold text-emerald-300 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-500/30 shrink-0">
-              ${camp.system}
+              ${escapeHtml(camp.system || 'RPG')}
             </span>
           </div>
           <p class="text-xs text-slate-400 truncate mt-0.5">
-            Personagem: <strong class="text-emerald-300">${camp.characterName || 'N/A'}</strong> &bull; Criador: @${camp.createdByName || 'Aventureiro'}
+            Personagem: <strong class="text-emerald-300">${escapeHtml(camp.characterName || 'N/A')}</strong> &bull; Criador: @${escapeHtml(camp.createdByName || 'Você')}
           </p>
         </div>
-        <button onclick="window.loadAndContinueCampaign('${camp.id}')" class="text-xs btn-green-neon px-3.5 py-1.5 rounded-lg text-emerald-100 font-bold shrink-0 shadow-sm">
+        <button onclick="window.loadAndContinueCampaign('${escapeJsString(camp.id || '')}')" class="text-xs btn-green-neon px-3.5 py-1.5 rounded-lg text-emerald-100 font-bold shrink-0 shadow-sm">
           Entrar
         </button>
       </div>
@@ -5534,15 +5632,7 @@ window.handleNovaCampanhaSubmit = async function(e: Event) {
       characterId: linkedChar.id,
       characterName: linkedChar.name,
       characterSystem: linkedChar.system,
-      characterData: {
-        id: linkedChar.id,
-        name: linkedChar.name,
-        system: linkedChar.system,
-        totalLevel: linkedChar.totalLevel || 1,
-        class1: linkedChar.class1 || '',
-        race: linkedChar.race || '',
-        origin: linkedChar.origin || ''
-      },
+      characterData: JSON.parse(JSON.stringify(linkedChar)),
       createdBy: creatorUid,
       createdByName: creatorName,
       status: 'active',
@@ -5804,6 +5894,16 @@ window.enterGameSession = async function(campaignId?: string) {
   if (charBadge) charBadge.innerText = char.name || 'Personagem';
   if (sheetNameEl) sheetNameEl.innerText = char.name || 'Sem Nome';
   if (sheetClassEl) sheetClassEl.innerText = `${char.race || 'Humano'} • ${classesText}`;
+
+  // Update Game Avatar Image
+  const avatarEl = document.getElementById('game-sheet-avatar') as HTMLImageElement | null;
+  if (avatarEl) {
+    const defaultAvatar = 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg';
+    avatarEl.src = char.profilePictureUrl && char.profilePictureUrl.trim() ? char.profilePictureUrl.trim() : defaultAvatar;
+    avatarEl.onerror = () => {
+      avatarEl.src = defaultAvatar;
+    };
+  }
 
   // 5. Render Left Character Sheet Tab (Default to 'cabecalho')
   window.setGameSheetTab('cabecalho');
@@ -6268,22 +6368,29 @@ function renderSheetTabCabecalho(char: any): string {
   }
 
   const creatorName = char.playerName || char.player || (window.currentUserProfile?.username || 'Aventureiro');
+  const defaultAvatar = 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg';
+  const photoUrl = char.profilePictureUrl && char.profilePictureUrl.trim() ? char.profilePictureUrl.trim() : defaultAvatar;
 
   return `
     <div class="space-y-3 font-rajdhani text-xs select-text">
-      <!-- Main Bio Banner -->
+      <!-- Main Bio Banner with Avatar -->
       <div class="p-3.5 rounded-xl bg-gradient-to-br from-indigo-950/80 via-[#0e1222] to-purple-950/80 border border-indigo-500/30 shadow-md">
-        <div class="flex items-start justify-between">
-          <div>
-            <h4 class="font-orbitron font-bold text-base text-white tracking-wide">${escapeHtml(char.name || 'Sem Nome')}</h4>
-            <p class="text-indigo-300 font-semibold text-xs mt-0.5">
-              <span>${escapeHtml(char.race || 'Humano')}</span> &bull; 
-              <span class="text-amber-300 font-bold">${escapeHtml(classesText)}</span>
-            </p>
+        <div class="flex items-center space-x-3.5">
+          <img src="${escapeHtml(photoUrl)}" alt="${escapeHtml(char.name || 'Herói')}" class="w-14 h-14 rounded-full object-cover border-2 border-purple-400/60 shadow-md bg-purple-950/60 shrink-0" onerror="this.src='${defaultAvatar}'">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-start justify-between">
+              <div class="min-w-0">
+                <h4 class="font-orbitron font-bold text-base text-white tracking-wide truncate">${escapeHtml(char.name || 'Sem Nome')}</h4>
+                <p class="text-indigo-300 font-semibold text-xs mt-0.5 truncate">
+                  <span>${escapeHtml(char.race || 'Humano')}</span> &bull; 
+                  <span class="text-amber-300 font-bold">${escapeHtml(classesText)}</span>
+                </p>
+              </div>
+              <span class="bg-indigo-950 text-indigo-300 border border-indigo-400/50 font-orbitron font-bold text-xs px-2.5 py-1 rounded-lg shrink-0 ml-2">
+                Nível ${char.totalLevel || 1}
+              </span>
+            </div>
           </div>
-          <span class="bg-indigo-950 text-indigo-300 border border-indigo-400/50 font-orbitron font-bold text-xs px-2.5 py-1 rounded-lg">
-            Nível ${char.totalLevel || 1}
-          </span>
         </div>
       </div>
 
@@ -7051,25 +7158,31 @@ window.renderEquippedWeapons = function() {
 
   let html = '';
   attacks.forEach((atk) => {
+    const atkName = atk.name || atk.weapon || 'Arma';
+    const atkDmg = atk.damage || '1d8';
+    const atkCrit = atk.crit || '20/x2';
+    const atkBonus = typeof atk.atkBonus === 'number' ? atk.atkBonus : 0;
+    const bonusStr = atk.atkBonusStr || (atkBonus >= 0 ? `+${atkBonus}` : `${atkBonus}`);
+
     html += `
       <div class="bg-[#0b0e1a] p-2.5 rounded-xl border border-red-500/25 hover:border-red-500/50 transition-all flex items-center justify-between group">
-        <div>
+        <div class="min-w-0 flex-1 mr-2">
           <div class="flex items-center space-x-2">
-            <span class="text-xs text-red-400">⚔️</span>
-            <h5 class="font-orbitron font-bold text-white text-xs">${escapeHtml(atk.name)}</h5>
+            <span class="text-xs text-red-400 shrink-0">⚔️</span>
+            <h5 class="font-orbitron font-bold text-white text-xs truncate">${escapeHtml(atkName)}</h5>
           </div>
-          <p class="text-[10px] text-slate-400 mt-0.5">
-            Dano: <strong class="text-amber-300 font-mono">${escapeHtml(atk.damage)}</strong> &bull; Crítico: <span class="font-mono text-slate-300">${escapeHtml(atk.crit)}</span>
+          <p class="text-[10px] text-slate-400 mt-0.5 truncate">
+            Dano: <strong class="text-amber-300 font-mono">${escapeHtml(atkDmg)}</strong> &bull; Crítico: <span class="font-mono text-slate-300">${escapeHtml(atkCrit)}</span>
           </p>
         </div>
         <button 
           type="button" 
-          onclick="window.rollCharacterAttack('${escapeHtml(atk.name)}', ${atk.atkBonus}, '${escapeHtml(atk.damage)}', '${escapeHtml(atk.crit)}')" 
-          class="px-2.5 py-1.5 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-500/40 text-red-200 hover:text-white font-bold text-xs flex items-center space-x-1 transition-all shadow-sm"
-          title="Rolar Ataque (${atk.atkBonusStr})"
+          onclick="window.rollCharacterAttack('${escapeJsString(atkName)}', ${atkBonus}, '${escapeJsString(atkDmg)}', '${escapeJsString(atkCrit)}')" 
+          class="px-2.5 py-1.5 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-500/40 text-red-200 hover:text-white font-bold text-xs flex items-center space-x-1 transition-all shadow-sm shrink-0"
+          title="Rolar Ataque (${bonusStr})"
         >
           <span>🎲</span>
-          <span>${atk.atkBonusStr}</span>
+          <span>${bonusStr}</span>
         </button>
       </div>
     `;
@@ -7087,7 +7200,7 @@ window.renderEquippedArmor = function() {
 
   const char = activeGameCharacter || {};
   const defData = getCharacterDefense(char);
-  const armors = defData.armors;
+  const armors = defData.armors || [];
 
   if (armors.length === 0) {
     container.innerHTML = `
@@ -7100,19 +7213,24 @@ window.renderEquippedArmor = function() {
 
   let html = '';
   armors.forEach((arm: any) => {
+    const armName = arm.name || 'Armadura / Escudo';
+    const armType = arm.type || 'Equipamento';
+    const armDef = arm.defense !== undefined ? arm.defense : (arm.defenseBonus || 0);
+    const penalty = arm.penalty !== undefined ? arm.penalty : (arm.armorPenalty || 0);
+
     html += `
       <div class="bg-[#0b0e1a] p-2.5 rounded-xl border border-indigo-500/25 flex items-center justify-between">
-        <div>
+        <div class="min-w-0 flex-1 mr-2">
           <div class="flex items-center space-x-2">
-            <span class="text-xs text-indigo-400">🛡️</span>
-            <h5 class="font-bold text-white text-xs">${escapeHtml(arm.name || 'Armadura')}</h5>
+            <span class="text-xs text-indigo-400 shrink-0">🛡️</span>
+            <h5 class="font-bold text-white text-xs truncate">${escapeHtml(armName)}</h5>
           </div>
-          <p class="text-[10px] text-slate-400 mt-0.5">
-            Tipo: ${escapeHtml(arm.type || 'Leve')}${arm.penalty ? ` &bull; Penalidade: -${arm.penalty}` : ''}
+          <p class="text-[10px] text-slate-400 mt-0.5 truncate">
+            Tipo: ${escapeHtml(armType)}${penalty ? ` &bull; Penalidade: -${penalty}` : ''}
           </p>
         </div>
-        <span class="bg-indigo-950 text-indigo-300 border border-indigo-400/40 font-mono font-bold text-xs px-2 py-0.5 rounded">
-          +${arm.defense || 0} Def
+        <span class="bg-indigo-950 text-indigo-300 border border-indigo-400/40 font-mono font-bold text-xs px-2 py-0.5 rounded shrink-0">
+          +${armDef} Def
         </span>
       </div>
     `;
@@ -7129,15 +7247,18 @@ window.renderConsumableItems = function() {
   if (!container) return;
 
   const char = activeGameCharacter || {};
-  const inventory = char.inventory || [];
+  const inventory = Array.isArray(char.inventory) ? char.inventory : [];
   
   // Filter for consumable items
   const consumables: { item: any; index: number }[] = [];
   inventory.forEach((item: any, idx: number) => {
+    if (!item) return;
     const nameLower = (item.name || '').toLowerCase();
     const catLower = (item.category || '').toLowerCase();
+    const tagLower = (item.tag || '').toLowerCase();
     if (
       catLower.includes('consum') ||
+      tagLower.includes('consum') ||
       catLower.includes('poção') ||
       catLower.includes('alquimia') ||
       nameLower.includes('poção') ||
@@ -7167,22 +7288,25 @@ window.renderConsumableItems = function() {
   let html = '';
   consumables.forEach(({ item, index }) => {
     const qty = item.quantity !== undefined ? item.quantity : 1;
+    const itemName = item.name || 'Item Consumível';
+    const itemNotes = item.notes || item.description || '';
+
     html += `
       <div class="bg-[#0b0e1a] p-2.5 rounded-xl border border-purple-500/25 hover:border-purple-500/40 transition-colors flex items-center justify-between">
-        <div>
+        <div class="min-w-0 flex-1 mr-2">
           <div class="flex items-center space-x-2">
-            <span class="text-xs">🧪</span>
-            <h5 class="font-bold text-white text-xs">${escapeHtml(item.name || 'Consumível')}</h5>
+            <span class="text-xs shrink-0">🧪</span>
+            <h5 class="font-bold text-white text-xs truncate">${escapeHtml(itemName)}</h5>
           </div>
-          <p class="text-[10px] text-slate-400 mt-0.5">
-            Quantidade: <strong class="text-amber-300 font-mono font-bold">x${qty}</strong> ${item.notes ? `&bull; ${escapeHtml(item.notes)}` : ''}
+          <p class="text-[10px] text-slate-400 mt-0.5 truncate">
+            Quantidade: <strong class="text-amber-300 font-mono font-bold">x${qty}</strong> ${itemNotes ? `&bull; ${escapeHtml(itemNotes)}` : ''}
           </p>
         </div>
         <button 
           type="button" 
           onclick="window.useConsumableItem(${index})" 
           class="px-2.5 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-200 hover:text-white font-bold text-xs flex items-center space-x-1 transition-all shadow-sm flex-shrink-0"
-          title="Usar 1 unidade de ${escapeHtml(item.name)}"
+          title="Usar 1 unidade de ${escapeHtml(itemName)}"
         >
           <span>✨</span>
           <span>Usar</span>
