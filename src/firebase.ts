@@ -351,6 +351,19 @@ export async function getCharacterById(characterId: string): Promise<(CharacterD
 }
 
 /**
+ * Deletes a character by ID
+ */
+export async function deleteCharacterDoc(characterId: string): Promise<void> {
+  try {
+    const charRef = doc(db, 'characters', characterId);
+    await deleteDoc(charRef);
+  } catch (error) {
+    console.error("Error deleting character:", error);
+    throw error;
+  }
+}
+
+/**
  * Saves a new character or updates an existing one in Firebase Firestore
  */
 export async function saveCharacter(characterData: Omit<CharacterData, 'userId' | 'createdAt' | 'updatedAt'>, uid: string, existingId?: string): Promise<string> {
@@ -510,6 +523,28 @@ export async function createCampaign(campaign: Omit<CampaignData, 'id'>): Promis
   } catch (error) {
     console.error("Error creating campaign in Firebase:", error);
     throw error;
+  }
+}
+
+/**
+ * Subscribes in real-time to user's characters
+ */
+export function subscribeToUserCharacters(uid: string, callback: (characters: any[]) => void) {
+  try {
+    const charsCol = collection(db, 'characters');
+    const q = query(charsCol, where('userId', '==', uid));
+    return onSnapshot(q, (snapshot) => {
+      const characters: any[] = [];
+      snapshot.forEach((docSnap) => {
+        characters.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      callback(characters);
+    }, (error) => {
+      console.warn("Characters snapshot error:", error);
+    });
+  } catch (error) {
+    console.warn("Error subscribing to characters:", error);
+    return () => {};
   }
 }
 

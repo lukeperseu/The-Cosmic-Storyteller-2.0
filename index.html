@@ -52,6 +52,14 @@
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
+    .pf2e-action-cb:checked + div {
+      background-color: rgba(16, 185, 129, 0.2);
+      border-color: rgba(16, 185, 129, 1);
+    }
+    #action-r:checked + div {
+      background-color: rgba(6, 182, 212, 0.2);
+      border-color: rgba(6, 182, 212, 1);
+    }
     body {
       background-color: #060712;
       color: #e2e8f0;
@@ -264,18 +272,18 @@
         <div class="space-y-3.5 relative">
 
           <!-- 1. Campanhas Globais (Green Neon Highlight) -->
-          <button onclick="openModal('campanhas-globais-modal')" class="btn-green-neon w-full py-3 px-5 rounded-xl text-emerald-100 font-rajdhani font-bold text-base sm:text-lg tracking-wide flex items-center justify-between group">
+          <button onclick="window.showToast('Campanhas Globais estão offline no momento.', 'error')" class="btn-slate-cosmic w-full py-3 px-5 rounded-xl text-slate-400 font-rajdhani font-bold text-base sm:text-lg tracking-wide flex items-center justify-between group cursor-not-allowed opacity-80">
             <div class="flex items-center space-x-3">
-              <div class="p-1.5 rounded-lg bg-emerald-900/60 text-emerald-300 group-hover:scale-110 transition-transform">
+              <div class="p-1.5 rounded-lg bg-slate-800/60 text-slate-500 transition-transform">
                 <i data-lucide="sparkles" class="w-5 h-5"></i>
               </div>
               <span>Campanhas Globais</span>
             </div>
             <div class="flex items-center space-x-2">
-              <span class="text-[11px] font-orbitron bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 px-2.5 py-0.5 rounded-full">
-                ONLINE
+              <span class="text-[11px] font-orbitron bg-red-950/80 border border-red-500/50 text-red-400 px-2.5 py-0.5 rounded-full">
+                OFFLINE
               </span>
-              <i data-lucide="chevron-right" class="w-5 h-5 text-emerald-400 group-hover:translate-x-1 transition-transform"></i>
+              <i data-lucide="lock" class="w-4 h-4 text-slate-500"></i>
             </div>
           </button>
 
@@ -302,18 +310,18 @@
           </button>
 
           <!-- 4. Monstro da Semana -->
-          <button onclick="openModal('monstro-semana-modal')" class="btn-slate-cosmic w-full py-3 px-5 rounded-xl text-slate-100 font-rajdhani font-bold text-base sm:text-lg tracking-wide flex items-center justify-between group">
+          <button onclick="window.showToast('O Monstro da Semana está offline no momento.', 'error')" class="btn-slate-cosmic w-full py-3 px-5 rounded-xl text-slate-400 font-rajdhani font-bold text-base sm:text-lg tracking-wide flex items-center justify-between group cursor-not-allowed opacity-80">
             <div class="flex items-center space-x-3">
-              <div class="p-1.5 rounded-lg bg-red-900/40 text-red-400 group-hover:scale-110 transition-transform">
+              <div class="p-1.5 rounded-lg bg-slate-800/60 text-slate-500 transition-transform">
                 <i data-lucide="skull" class="w-5 h-5"></i>
               </div>
               <span>Monstro da Semana</span>
             </div>
             <div class="flex items-center space-x-2">
-              <span class="text-[10px] font-orbitron bg-red-950/80 border border-red-500/40 text-red-300 px-2 py-0.5 rounded">
-                DESAFIO
+              <span class="text-[10px] font-orbitron bg-red-950/80 border border-red-500/40 text-red-400 px-2 py-0.5 rounded">
+                OFFLINE
               </span>
-              <i data-lucide="chevron-right" class="w-5 h-5 text-red-400 group-hover:translate-x-1 transition-transform"></i>
+              <i data-lucide="lock" class="w-4 h-4 text-slate-500"></i>
             </div>
           </button>
 
@@ -326,8 +334,8 @@
               <span>Meus Personagens</span>
             </div>
             <div class="flex items-center space-x-2">
-              <span class="text-[11px] font-orbitron text-indigo-300 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-500/30">
-                3 SALVOS
+              <span id="meus-personagens-count-badge" class="text-[11px] font-orbitron text-indigo-300 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-500/30">
+                0 SALVOS
               </span>
               <i data-lucide="chevron-right" class="w-5 h-5 text-indigo-400 group-hover:translate-x-1 transition-transform"></i>
             </div>
@@ -1132,9 +1140,14 @@
         <h3 class="text-[11px] font-orbitron font-bold text-slate-400 tracking-widest uppercase mb-2 px-1">COMUNIDADE & INTERAÇÃO</h3>
         <nav class="space-y-2">
           <!-- Campanhas Globais -->
-          <button onclick="toggleSidebarMenu(); openModal('campanhas-globais-modal')" class="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl border border-emerald-500/50 bg-emerald-950/20 text-emerald-100 font-rajdhani font-bold text-sm hover:bg-emerald-900/40 transition-colors">
-            <span class="text-base">🌐</span>
-            <span>Campanhas Globais</span>
+          <button onclick="toggleSidebarMenu(); window.showToast('Campanhas Globais estão offline no momento.', 'error')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-900 text-slate-400 font-rajdhani font-bold text-sm cursor-not-allowed opacity-80">
+            <div class="flex items-center space-x-3">
+              <span class="text-base text-slate-500">🌐</span>
+              <span>Campanhas Globais</span>
+            </div>
+            <span class="text-[9px] font-orbitron bg-red-950/80 border border-red-500/50 text-red-400 px-1.5 py-0.5 rounded">
+              OFFLINE
+            </span>
           </button>
 
           <!-- ChatBot Íris & Aurora -->
@@ -2202,13 +2215,12 @@
       <div class="space-y-4 mb-5">
         <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest">SISTEMA BASE / MATERIAL DE MECÂNICA & LORE RPG:</label>
         <div class="flex flex-col sm:flex-row gap-3">
-          <select id="char-system" class="flex-1 bg-[#0b0f19] border border-slate-700 rounded-md px-3 py-2 text-sm text-white font-bold focus:outline-none focus:border-purple-500">
-            <option>Tormenta20 (Nativo)</option>
-            <option>D&D 5e</option>
-            <option>Call of Cthulhu 7e</option>
+          <select id="char-system" onchange="window.handleCharSystemChange()" class="flex-1 bg-[#0b0f19] border border-slate-700 rounded-md px-3 py-2 text-sm text-white font-bold focus:outline-none focus:border-purple-500">
+            <option value="Tormenta20">Tormenta20 (Nativo)</option>
+            <option value="Pathfinder 2e">Pathfinder 2e</option>
           </select>
-          <input type="text" placeholder="Digite novo RPG / Sistema..." class="flex-1 bg-[#0b0f19] border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-purple-500">
-          <button class="bg-[#3b1978] hover:bg-[#482090] border border-[#502b9e] rounded-md px-4 py-2 text-xs font-bold text-white transition-colors whitespace-nowrap">
+          <input type="text" placeholder="Digite novo RPG / Sistema..." class="flex-1 bg-[#0b0f19] border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-purple-500 hidden">
+          <button class="hidden bg-[#3b1978] hover:bg-[#482090] border border-[#502b9e] rounded-md px-4 py-2 text-xs font-bold text-white transition-colors whitespace-nowrap">
             + Incluir
           </button>
         </div>
@@ -2220,7 +2232,264 @@
         </div>
       </div>
 
-      <!-- Accordion Toolbar: Expand All / Collapse All -->
+      <!-- PF2e Container -->
+      <div id="pf2e-sheet-container" class="hidden mb-6 space-y-6">
+        
+        <!-- Import Area -->
+        <div class="bg-[#141824] border border-[#2d354f] rounded-lg p-5">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center space-x-3">
+              <div class="p-2 bg-emerald-900/30 text-emerald-400 rounded-lg border border-emerald-500/20">
+                <i data-lucide="file-code" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <h3 class="text-white font-rajdhani font-bold text-lg">Conexão Pathbuilder 2e</h3>
+                <p class="text-xs text-slate-400">Cole o JSON exportado do seu app ou o ID gerado pelo "Export JSON".</p>
+              </div>
+            </div>
+            <button onclick="window.processPathbuilderJson()" class="bg-emerald-700 hover:bg-emerald-600 border border-emerald-500 px-4 py-2 rounded-md text-xs font-bold text-white transition-colors">
+              Processar Ficha
+            </button>
+          </div>
+          <div class="relative">
+            <textarea id="pf2e-import-json" class="w-full bg-[#0b0f19] border border-slate-700 rounded-md p-4 text-xs text-emerald-300 font-mono focus:outline-none focus:border-emerald-500 h-24 resize-y" placeholder="Ex: Cole o JSON completo aqui ou digite o ID numérico (ex: 466128) se a integração remota estiver ativa..."></textarea>
+          </div>
+        </div>
+
+        <!-- PF2e Visual Sheet (Hidden by default until parsed) -->
+        <div id="pf2e-visual-sheet" class="bg-[#0f131e] border border-emerald-500/30 rounded-xl overflow-hidden shadow-2xl">
+          
+          <!-- Header (Name & Core Info) -->
+          <div class="bg-gradient-to-r from-[#1a2333] to-[#0f131e] p-5 border-b border-emerald-500/20 flex flex-col md:flex-row gap-5 items-center">
+            <div class="relative group">
+              <div class="w-24 h-24 rounded-full border-2 border-emerald-500/50 overflow-hidden bg-[#0b0f19] flex items-center justify-center relative group">
+                <img id="pf2e-avatar-preview" src="https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg" class="w-full h-full object-cover">
+              </div>
+            </div>
+            <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+              <div class="md:col-span-2">
+                <label class="text-[10px] text-emerald-400/80 font-bold uppercase tracking-wider">URL da Foto de Perfil (Avatar)</label>
+                <input type="url" id="pf2e-photo-url" class="w-full bg-black/40 border border-slate-700 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-400 mt-1" placeholder="https://exemplo.com/minha-foto.jpg" oninput="document.getElementById('pf2e-avatar-preview').src = this.value || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg'">
+              </div>
+              <div>
+                <label class="text-[10px] text-emerald-400/80 font-bold uppercase tracking-wider">Nome do Personagem</label>
+                <input type="text" id="pf2e-name" class="w-full bg-transparent border-b border-slate-700 text-xl font-rajdhani font-bold text-white focus:outline-none focus:border-emerald-400 pb-1" placeholder="Herói do Pathbuilder">
+              </div>
+              <div class="flex gap-4">
+                <div class="flex-1">
+                  <label class="text-[10px] text-emerald-400/80 font-bold uppercase tracking-wider">Classe</label>
+                  <input type="text" id="pf2e-class" class="w-full bg-transparent border-b border-slate-700 text-sm text-slate-200 focus:outline-none focus:border-emerald-400 pb-1" readonly>
+                </div>
+                <div class="w-16">
+                  <label class="text-[10px] text-emerald-400/80 font-bold uppercase tracking-wider">Nível</label>
+                  <input type="number" id="pf2e-level" class="w-full bg-transparent border-b border-slate-700 text-sm font-bold text-center text-emerald-300 focus:outline-none focus:border-emerald-400 pb-1" readonly>
+                </div>
+              </div>
+              <div>
+                <label class="text-[10px] text-emerald-400/80 font-bold uppercase tracking-wider">Ancestralidade & Herança</label>
+                <input type="text" id="pf2e-ancestry" class="w-full bg-transparent border-b border-slate-700 text-sm text-slate-300 focus:outline-none focus:border-emerald-400 pb-1" readonly>
+              </div>
+              <div>
+                <label class="text-[10px] text-emerald-400/80 font-bold uppercase tracking-wider">Biografia (Background)</label>
+                <input type="text" id="pf2e-background" class="w-full bg-transparent border-b border-slate-700 text-sm text-slate-300 focus:outline-none focus:border-emerald-400 pb-1" readonly>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tracker & Vitals -->
+          <div class="p-5 grid grid-cols-1 md:grid-cols-3 gap-6 bg-[#121622]">
+            
+            <!-- HP & Defenses -->
+            <div class="bg-[#0b0f19] border border-slate-700/50 rounded-lg p-4 space-y-4 shadow-inner relative overflow-hidden">
+              <div class="absolute top-0 left-0 w-1 h-full bg-red-500/50"></div>
+              <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">VITALIDADE & DEFESA</h4>
+              
+              <div class="flex items-center justify-between">
+                <span class="text-sm font-bold text-slate-300">Pontos de Vida (PV)</span>
+                <div class="flex items-center space-x-2">
+                  <input type="number" id="pf2e-hp-atual" class="w-16 bg-[#1a2333] border border-red-500/30 text-red-300 text-center rounded py-1 font-bold">
+                  <span class="text-slate-500">/</span>
+                  <input type="number" id="pf2e-hp-max" class="w-16 bg-transparent border-none text-slate-400 text-center py-1 font-bold" readonly>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between">
+                <span class="text-sm font-bold text-slate-300">Classe de Armadura (CA)</span>
+                <div class="w-16 h-10 bg-[#1a2333] border border-blue-500/30 rounded flex items-center justify-center">
+                  <span id="pf2e-ac" class="text-lg font-bold text-blue-300">10</span>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between">
+                <span class="text-sm font-bold text-slate-300">Pontos de Foco</span>
+                <div class="flex items-center space-x-2">
+                  <input type="number" id="pf2e-focus-atual" class="w-12 bg-[#1a2333] border border-fuchsia-500/30 text-fuchsia-300 text-center rounded py-1 font-bold">
+                  <span class="text-slate-500">/</span>
+                  <input type="number" id="pf2e-focus-max" class="w-12 bg-transparent border-none text-slate-400 text-center py-1 font-bold" readonly>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Economy Tracker -->
+            <div class="bg-[#0b0f19] border border-slate-700/50 rounded-lg p-4 shadow-inner relative overflow-hidden">
+              <div class="absolute top-0 left-0 w-1 h-full bg-emerald-500/50"></div>
+              <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+                <span>ECONOMIA DE AÇÕES (TURNO)</span>
+                <button onclick="window.resetPf2eActions()" class="text-[9px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded hover:bg-slate-700">RESTAURAR</button>
+              </h4>
+              <div class="flex justify-around items-center h-20">
+                <!-- Ações -->
+                <div class="flex space-x-3">
+                  <label class="flex flex-col items-center cursor-pointer group">
+                    <input type="checkbox" class="pf2e-action-cb hidden" id="action-1">
+                    <div class="w-10 h-10 rounded border-2 border-emerald-500/50 flex items-center justify-center bg-[#1a2333] group-hover:bg-[#202b40] transition-colors shadow-[0_0_10px_rgba(16,185,129,0.1)]">
+                      <span class="text-emerald-400 font-bold select-none">◆</span>
+                    </div>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer group">
+                    <input type="checkbox" class="pf2e-action-cb hidden" id="action-2">
+                    <div class="w-10 h-10 rounded border-2 border-emerald-500/50 flex items-center justify-center bg-[#1a2333] group-hover:bg-[#202b40] transition-colors shadow-[0_0_10px_rgba(16,185,129,0.1)]">
+                      <span class="text-emerald-400 font-bold select-none">◆</span>
+                    </div>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer group">
+                    <input type="checkbox" class="pf2e-action-cb hidden" id="action-3">
+                    <div class="w-10 h-10 rounded border-2 border-emerald-500/50 flex items-center justify-center bg-[#1a2333] group-hover:bg-[#202b40] transition-colors shadow-[0_0_10px_rgba(16,185,129,0.1)]">
+                      <span class="text-emerald-400 font-bold select-none">◆</span>
+                    </div>
+                  </label>
+                </div>
+                <div class="w-px h-12 bg-slate-700"></div>
+                <!-- Reação -->
+                <label class="flex flex-col items-center cursor-pointer group">
+                  <input type="checkbox" class="pf2e-action-cb hidden" id="action-r">
+                  <div class="w-10 h-10 rounded-full border-2 border-cyan-500/50 flex items-center justify-center bg-[#1a2333] group-hover:bg-[#202b40] transition-colors shadow-[0_0_10px_rgba(6,182,212,0.1)]" title="Reação">
+                    <span class="text-cyan-400 font-bold select-none text-xl">⮬</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <!-- Saves -->
+            <div class="bg-[#0b0f19] border border-slate-700/50 rounded-lg p-4 shadow-inner relative overflow-hidden">
+              <div class="absolute top-0 left-0 w-1 h-full bg-indigo-500/50"></div>
+              <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">TESTES DE RESISTÊNCIA</h4>
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-bold text-slate-300">Fortitude</span>
+                  <div class="flex items-center space-x-2">
+                    <span id="pf2e-save-fort-prof" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">T</span>
+                    <span id="pf2e-save-fort" class="w-10 text-center font-bold text-indigo-300">+0</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-bold text-slate-300">Reflexos</span>
+                  <div class="flex items-center space-x-2">
+                    <span id="pf2e-save-ref-prof" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">T</span>
+                    <span id="pf2e-save-ref" class="w-10 text-center font-bold text-indigo-300">+0</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-bold text-slate-300">Vontade</span>
+                  <div class="flex items-center space-x-2">
+                    <span id="pf2e-save-will-prof" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">T</span>
+                    <span id="pf2e-save-will" class="w-10 text-center font-bold text-indigo-300">+0</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div> <!-- End Tracker & Vitals -->
+
+          <!-- Attributes Row -->
+          <div class="grid grid-cols-6 border-y border-emerald-500/20 bg-[#161b29] divide-x divide-slate-700/50">
+            <div class="p-3 text-center">
+              <div class="text-[10px] font-bold text-slate-400 mb-1">FOR</div>
+              <div id="pf2e-attr-str" class="text-xl font-bold text-white">+0</div>
+            </div>
+            <div class="p-3 text-center">
+              <div class="text-[10px] font-bold text-slate-400 mb-1">DES</div>
+              <div id="pf2e-attr-dex" class="text-xl font-bold text-white">+0</div>
+            </div>
+            <div class="p-3 text-center">
+              <div class="text-[10px] font-bold text-slate-400 mb-1">CON</div>
+              <div id="pf2e-attr-con" class="text-xl font-bold text-white">+0</div>
+            </div>
+            <div class="p-3 text-center">
+              <div class="text-[10px] font-bold text-slate-400 mb-1">INT</div>
+              <div id="pf2e-attr-int" class="text-xl font-bold text-white">+0</div>
+            </div>
+            <div class="p-3 text-center">
+              <div class="text-[10px] font-bold text-slate-400 mb-1">SAB</div>
+              <div id="pf2e-attr-wis" class="text-xl font-bold text-white">+0</div>
+            </div>
+            <div class="p-3 text-center">
+              <div class="text-[10px] font-bold text-slate-400 mb-1">CAR</div>
+              <div id="pf2e-attr-cha" class="text-xl font-bold text-white">+0</div>
+            </div>
+          </div>
+          
+          <!-- Secondary Details Tabs (Combate, Talentos, Inventário) -->
+          <div>
+            <div class="flex border-b border-emerald-500/20 bg-[#121622]">
+              <button type="button" onclick="window.switchPf2eTab('combat')" id="pf2e-btn-combat" class="flex-1 py-3 text-xs font-bold text-emerald-400 border-b-2 border-emerald-400 bg-[#0b0f19] transition-colors">Armas & Magia</button>
+              <button type="button" onclick="window.switchPf2eTab('feats')" id="pf2e-btn-feats" class="flex-1 py-3 text-xs font-bold text-slate-400 border-b-2 border-transparent hover:text-emerald-300 transition-colors">Talentos</button>
+              <button type="button" onclick="window.switchPf2eTab('inventory')" id="pf2e-btn-inventory" class="flex-1 py-3 text-xs font-bold text-slate-400 border-b-2 border-transparent hover:text-emerald-300 transition-colors">Equipamentos</button>
+            </div>
+            
+            <div class="p-5 bg-[#0b0f19] min-h-[250px]">
+              
+              <!-- Combat Tab -->
+              <div id="pf2e-tab-combat" class="pf2e-tab-content space-y-4">
+                <div>
+                  <h4 class="text-[10px] font-bold text-emerald-500/80 uppercase tracking-widest mb-3 flex items-center space-x-2">
+                    <i data-lucide="swords" class="w-3.5 h-3.5"></i>
+                    <span>Armas Mistas & Ataques</span>
+                  </h4>
+                  <div id="pf2e-weapons-container" class="space-y-2">
+                    <p class="text-xs text-slate-500 italic">Procesando JSON...</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Feats Tab -->
+              <div id="pf2e-tab-feats" class="pf2e-tab-content hidden space-y-4">
+                <h4 class="text-[10px] font-bold text-emerald-500/80 uppercase tracking-widest mb-3 flex items-center space-x-2">
+                  <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                  <span>Talentos & Habilidades Especiais</span>
+                </h4>
+                <div id="pf2e-feats-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  <p class="text-xs text-slate-500 italic">Procesando JSON...</p>
+                </div>
+              </div>
+
+              <!-- Inventory Tab -->
+              <div id="pf2e-tab-inventory" class="pf2e-tab-content hidden space-y-4">
+                <div class="flex items-center justify-between mb-3">
+                  <h4 class="text-[10px] font-bold text-emerald-500/80 uppercase tracking-widest flex items-center space-x-2">
+                    <i data-lucide="backpack" class="w-3.5 h-3.5"></i>
+                    <span>Inventário Geral</span>
+                  </h4>
+                  <div class="flex space-x-2 text-xs font-bold">
+                    <span class="text-yellow-400" id="pf2e-money-gp">0 GP</span>
+                    <span class="text-slate-300" id="pf2e-money-sp">0 SP</span>
+                    <span class="text-orange-400" id="pf2e-money-cp">0 CP</span>
+                  </div>
+                </div>
+                <div id="pf2e-equipment-container" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <p class="text-xs text-slate-500 italic">Procesando JSON...</p>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- T20 Container -->
+      <div id="t20-sheet-container">
+        <!-- Accordion Toolbar: Expand All / Collapse All -->
       <div class="flex items-center justify-between pb-1 px-1">
         <span class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
           <i data-lucide="layers" class="w-3.5 h-3.5 text-purple-400"></i>
@@ -2769,6 +3038,8 @@
         </div>
 
       </div>
+
+      </div> <!-- End of t20-sheet-container -->
 
       <!-- Action Buttons -->
       <div class="mt-8 flex flex-col sm:flex-row gap-3">
@@ -3784,11 +4055,41 @@
       } else if (type === 'sistemas-modal') {
         title.innerText = '⚡ Sistemas Assimilados';
         body.innerHTML = `
-          <p>Sistemas RPG compatíveis com o motor The Cosmic Storyteller:</p>
-          <div class="grid grid-cols-2 gap-2 mt-2 text-xs">
-            <div class="bg-cosmic-950 p-2 rounded border border-purple-500/30 text-purple-200">System 20 (D20 Space)</div>
-            <div class="bg-cosmic-950 p-2 rounded border border-purple-500/30 text-purple-200">Fate Core Cosmic</div>
-            <div class="bg-cosmic-950 p-2 rounded border border-purple-500/30 text-purple-200">Cyberpunk Red Modular</div>
+          <p class="text-xs text-slate-300 font-rajdhani mb-3">Sistemas RPG nativamente compatíveis com a mecânica do The Cosmic Storyteller:</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-rajdhani font-bold">
+            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
+              <span class="text-emerald-400">✓</span> <span>Tormenta20 (T20)</span>
+            </div>
+            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
+              <span class="text-emerald-400">✓</span> <span>Dungeons & Dragons 5e</span>
+            </div>
+            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
+              <span class="text-emerald-400">✓</span> <span>Dungeons & Dragons 5.5e (2024)</span>
+            </div>
+            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
+              <span class="text-emerald-400">✓</span> <span>Call of Cthulhu 7ª Edição</span>
+            </div>
+            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
+              <span class="text-emerald-400">✓</span> <span>Pathfinder 2ª Edição</span>
+            </div>
+            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
+              <span class="text-emerald-400">✓</span> <span>Ordem Paranormal RPG</span>
+            </div>
+            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
+              <span class="text-emerald-400">✓</span> <span>Cyberpunk RED</span>
+            </div>
+            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
+              <span class="text-emerald-400">✓</span> <span>Vampiro: A Máscara v5</span>
+            </div>
+            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
+              <span class="text-emerald-400">✓</span> <span>3D&T Alpha</span>
+            </div>
+            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
+              <span class="text-emerald-400">✓</span> <span>Fate Core</span>
+            </div>
+            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-slate-500/30 text-slate-300 flex items-center space-x-2 sm:col-span-2">
+              <span class="text-slate-400">⚡</span> <span>Outro / Sistema Personalizado</span>
+            </div>
           </div>
         `;
       }

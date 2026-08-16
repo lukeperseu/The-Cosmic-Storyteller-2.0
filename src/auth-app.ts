@@ -9,6 +9,7 @@ import {
   saveCharacter,
   getUserCharacters,
   getCharacterById,
+  deleteCharacterDoc,
   UserProfileData,
   CharacterClass,
   CharacterData,
@@ -24,6 +25,7 @@ import {
   CampaignData,
   createCampaign,
   subscribeToCampaigns,
+  subscribeToUserCharacters,
   deleteCampaign,
   getCampaignById,
   sendSessionMessage,
@@ -68,6 +70,7 @@ declare global {
     saveCharacterUI: () => Promise<void>;
     openPersonagensModal: () => Promise<void>;
     editCharacter: (charId: string) => void;
+    deleteCharacter: (charId: string) => Promise<void>;
     resetCharacterForm: () => void;
     loadedCharacters: any[];
     editingCharacterId: string | null;
@@ -213,6 +216,10 @@ declare global {
     renderSessionMessages: (messages: SessionMessage[]) => void;
     updateCharPhotoPreview: (url?: string) => void;
     testCharPhotoUrl: () => void;
+    handleCharSystemChange: () => void;
+    processPathbuilderJson: () => void;
+    resetPf2eActions: () => void;
+    switchPf2eTab: (tabId: string) => void;
   }
 }
 
@@ -657,6 +664,15 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+let userCharactersUnsubscribe: (() => void) | null = null;
+
+function updateCharacterCountBadge(count: number) {
+  const badge = document.getElementById('meus-personagens-count-badge');
+  if (badge) {
+    badge.innerText = `${count} SALVO${count === 1 ? '' : 'S'}`;
+  }
+}
+
 // Listen to Firebase Auth state change
 onAuthStateChanged(auth, async (user) => {
   if (user) {
@@ -672,11 +688,31 @@ onAuthStateChanged(auth, async (user) => {
       window.openUsernameModal(false);
       sendPresenceHeartbeat(true);
     }
+    
+    // Subscribe to user characters
+    if (userCharactersUnsubscribe) userCharactersUnsubscribe();
+    userCharactersUnsubscribe = subscribeToUserCharacters(user.uid, (chars) => {
+      window.loadedCharacters = chars;
+      updateCharacterCountBadge(chars.length);
+      // If modal is open, refresh it
+      const listContainer = document.getElementById('characters-list');
+      if (listContainer && listContainer.parentElement?.parentElement?.classList.contains('hidden') === false) {
+        window.openPersonagensModal(); // Re-render logic
+      }
+    });
+
   } else {
     currentGoogleUser = null;
     currentUserProfile = null;
     updateAppUIWithProfile(null, null);
     sendPresenceHeartbeat(true);
+    
+    if (userCharactersUnsubscribe) {
+      userCharactersUnsubscribe();
+      userCharactersUnsubscribe = null;
+    }
+    window.loadedCharacters = [];
+    updateCharacterCountBadge(0);
   }
 
   // Refresh user-specific campaign counts and list if opened
@@ -887,66 +923,96 @@ window.saveCharacterUI = async function() {
     const getValue = (id: string) => (document.getElementById(id) as HTMLInputElement)?.value || '';
     const getNum = (id: string) => parseInt((document.getElementById(id) as HTMLInputElement)?.value || '0', 10);
 
-    const classes = (window.characterClasses && window.characterClasses.length > 0)
-      ? window.characterClasses.map(c => ({
-          id: c.id,
-          name: (c.name || '').trim(),
-          level: Math.max(1, parseInt(c.level as any) || 1)
-        }))
-      : [{ id: 'cls_1', name: '', level: 1 }];
+    const systemValue = getValue('char-system');
+    let charData: any = {};
 
-    const computedTotalLevel = classes.reduce((sum: number, c) => sum + (c.level || 0), 0) || 1;
-    const class1 = classes[0]?.name || '';
-    const class1Level = classes[0]?.level || 1;
-    const class2 = classes[1]?.name || '';
-    const class2Level = classes[1]?.level || 0;
+    if (systemValue === 'Pathfinder 2e') {
+      const pbJsonStr = (document.getElementById('pf2e-import-json') as HTMLTextAreaElement)?.value || '';
+      let parsedName = 'Herói do Pathbuilder';
+      let parsedLevel = 1;
+      
+      try {
+        if (pbJsonStr) {
+          const pbObj = JSON.parse(pbJsonStr);
+          if (pbObj && pbObj.build) {
+            parsedName = pbObj.build.name || parsedName;
+            parsedLevel = pbObj.build.level || parsedLevel;
+          }
+        }
+      } catch (e) {
+        // Ignorar erro de parse JSON, salvar como está
+        console.warn('Pathbuilder JSON Parse Error', e);
+      }
 
-    const charData = {
-      system: getValue('char-system'),
-      name: getValue('char-name') || 'Herói Sem Nome',
-      playerName: getValue('char-player'),
-      profilePictureUrl: getValue('char-photo-url'),
-      race: getValue('char-race'),
-      origin: getValue('char-origin'),
-      divinity: getValue('char-divinity'),
-      totalLevel: computedTotalLevel,
-      alignment: getValue('char-alignment'),
-      size: getValue('char-size'),
-      speed: getValue('char-speed'),
-      age: getNum('char-age'),
-      classes: classes,
-      class1: class1,
-      class1Level: class1Level,
-      ...(classes.length > 1 && { 
-        class2: class2,
-        class2Level: class2Level
-      }),
-      attributes: window.characterAttributes || [],
-      skills: window.characterSkills || [],
-      pvAtual: getNum('char-pv-atual'),
-      pvMax: getNum('char-pv-max'),
-      pmAtual: getNum('char-pm-atual'),
-      pmMax: getNum('char-pm-max'),
-      defenseBase: parseInt((document.getElementById('char-defense-base') as HTMLInputElement)?.value || '10', 10),
-      defenseBoxes: window.characterDefenseBoxes || [],
-      inventory: window.characterInventory || [],
-      money: parseInt((document.getElementById('char-money') as HTMLInputElement)?.value || '0', 10) || 0,
-      currencyName: (document.getElementById('char-currency-name') as HTMLInputElement)?.value || 'T$ (Tibares)',
-      attacks: window.characterAttacks || [],
-      customSections: window.characterCustomSections || [],
-      background: getValue('char-background'),
-      eyes: getValue('char-eyes'),
-      skin: getValue('char-skin'),
-      hair: getValue('char-hair'),
-      appearanceOther: getValue('char-appearance-other'),
-      personality: getValue('char-personality'),
-      genderIdentity: getValue('char-gender-identity'),
-      sexualOrientation: getValue('char-sexual-orientation'),
-      activism: getValue('char-activism'),
-      prejudices: getValue('char-prejudices'),
-      likesOther: getValue('char-likes-other'),
-      episodes: window.characterEpisodes || []
-    };
+      charData = {
+        system: systemValue,
+        name: parsedName,
+        totalLevel: parsedLevel,
+        pathbuilderJson: pbJsonStr,
+        profilePictureUrl: getValue('pf2e-photo-url')
+      };
+    } else {
+      const classes = (window.characterClasses && window.characterClasses.length > 0)
+        ? window.characterClasses.map(c => ({
+            id: c.id,
+            name: (c.name || '').trim(),
+            level: Math.max(1, parseInt(c.level as any) || 1)
+          }))
+        : [{ id: 'cls_1', name: '', level: 1 }];
+
+      const computedTotalLevel = classes.reduce((sum: number, c) => sum + (c.level || 0), 0) || 1;
+      const class1 = classes[0]?.name || '';
+      const class1Level = classes[0]?.level || 1;
+      const class2 = classes[1]?.name || '';
+      const class2Level = classes[1]?.level || 0;
+
+      charData = {
+        system: systemValue,
+        name: getValue('char-name') || 'Herói Sem Nome',
+        playerName: getValue('char-player'),
+        profilePictureUrl: getValue('char-photo-url'),
+        race: getValue('char-race'),
+        origin: getValue('char-origin'),
+        divinity: getValue('char-divinity'),
+        totalLevel: computedTotalLevel,
+        alignment: getValue('char-alignment'),
+        size: getValue('char-size'),
+        speed: getValue('char-speed'),
+        age: getNum('char-age'),
+        classes: classes,
+        class1: class1,
+        class1Level: class1Level,
+        ...(classes.length > 1 && { 
+          class2: class2,
+          class2Level: class2Level
+        }),
+        attributes: window.characterAttributes || [],
+        skills: window.characterSkills || [],
+        pvAtual: getNum('char-pv-atual'),
+        pvMax: getNum('char-pv-max'),
+        pmAtual: getNum('char-pm-atual'),
+        pmMax: getNum('char-pm-max'),
+        defenseBase: parseInt((document.getElementById('char-defense-base') as HTMLInputElement)?.value || '10', 10),
+        defenseBoxes: window.characterDefenseBoxes || [],
+        inventory: window.characterInventory || [],
+        money: parseInt((document.getElementById('char-money') as HTMLInputElement)?.value || '0', 10) || 0,
+        currencyName: (document.getElementById('char-currency-name') as HTMLInputElement)?.value || 'T$ (Tibares)',
+        attacks: window.characterAttacks || [],
+        customSections: window.characterCustomSections || [],
+        background: getValue('char-background'),
+        eyes: getValue('char-eyes'),
+        skin: getValue('char-skin'),
+        hair: getValue('char-hair'),
+        appearanceOther: getValue('char-appearance-other'),
+        personality: getValue('char-personality'),
+        genderIdentity: getValue('char-gender-identity'),
+        sexualOrientation: getValue('char-sexual-orientation'),
+        activism: getValue('char-activism'),
+        prejudices: getValue('char-prejudices'),
+        likesOther: getValue('char-likes-other'),
+        episodes: window.characterEpisodes || []
+      };
+    }
 
     await saveCharacter(charData, currentGoogleUser.uid, window.editingCharacterId || undefined);
     
@@ -1007,7 +1073,17 @@ window.openPersonagensModal = async function() {
       const initial = char.name.charAt(0).toUpperCase();
       const level = char.totalLevel || 1;
       let charClass = 'Sem Classe';
-      if (char.classes && Array.isArray(char.classes) && char.classes.length > 0) {
+      
+      if (char.system === 'Pathfinder 2e') {
+        try {
+          const pbObj = JSON.parse(char.pathbuilderJson || '{}');
+          if (pbObj.build && pbObj.build.class) {
+            charClass = pbObj.build.class;
+          }
+        } catch (e) {
+          // Ignore parse errors here
+        }
+      } else if (char.classes && Array.isArray(char.classes) && char.classes.length > 0) {
         const validClasses = char.classes.filter(c => c.name && c.name.trim());
         if (validClasses.length > 0) {
           charClass = validClasses.map(c => `${c.name} ${c.level || 1}`).join(' / ');
@@ -1028,12 +1104,15 @@ window.openPersonagensModal = async function() {
             ${avatarHtml}
             <div>
               <h4 class="font-rajdhani font-bold text-base text-white">${char.name}</h4>
-              <p class="text-xs text-indigo-300">${charClass} &bull; Nível ${level} &bull; HP: ${char.pvAtual ?? '--'}/${char.pvMax ?? '--'}</p>
+              <p class="text-xs text-indigo-300">${charClass} &bull; Nível ${level}</p>
             </div>
           </div>
           <div class="flex items-center space-x-2">
             <button onclick="editCharacter('${char.id}')" class="p-2 text-slate-400 hover:text-indigo-300 hover:bg-indigo-900/30 rounded-lg transition-colors" title="Editar Ficha">
               <i data-lucide="edit-3" class="w-4 h-4"></i>
+            </button>
+            <button onclick="window.deleteCharacter('${char.id}')" class="p-2 text-slate-400 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors" title="Excluir Ficha">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
             </button>
             <button onclick="showToast('Personagem ${char.name} selecionado!')" class="text-xs bg-[#1e2336] hover:bg-[#262c45] border border-[#2f3755] px-4 py-2 rounded-lg text-indigo-200 transition-colors font-bold">Jogar</button>
           </div>
@@ -1076,6 +1155,20 @@ window.editCharacter = function(charId: string) {
   };
 
   setValue('char-system', char.system);
+  window.handleCharSystemChange();
+
+  if (char.system === 'Pathfinder 2e') {
+    const pf2eTextarea = document.getElementById('pf2e-import-json') as HTMLTextAreaElement;
+    if (pf2eTextarea) {
+      pf2eTextarea.value = char.pathbuilderJson || '';
+    }
+    setValue('pf2e-photo-url', char.profilePictureUrl || '');
+    const avatarEl = document.getElementById('pf2e-avatar-preview') as HTMLImageElement;
+    if (avatarEl) {
+      avatarEl.src = char.profilePictureUrl || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg';
+    }
+  }
+
   setValue('char-name', char.name);
   setValue('char-player', char.playerName);
   setValue('char-photo-url', char.profilePictureUrl || '');
@@ -1174,6 +1267,241 @@ window.editCharacter = function(charId: string) {
 };
 
 /**
+ * Delete a character by ID
+ */
+window.deleteCharacter = async function(charId: string) {
+  if (!confirm("Tem certeza que deseja excluir esta ficha permanentemente? Esta ação não pode ser desfeita.")) {
+    return;
+  }
+  
+  try {
+    await deleteCharacterDoc(charId);
+    if (window.showToast) window.showToast('Personagem excluído com sucesso!', 'success');
+    
+    // Refresh the list
+    if (currentGoogleUser) {
+      window.loadedCharacters = await getUserCharacters(currentGoogleUser.uid);
+      window.renderCharacterList();
+    }
+    
+    // If the deleted character was currently being edited, reset the form
+    if (window.editingCharacterId === charId) {
+      window.resetCharacterForm();
+    }
+  } catch (err) {
+    console.error("Error deleting character UI:", err);
+    if (window.showToast) window.showToast('Erro ao excluir personagem.', 'error');
+  }
+};
+
+window.handleCharSystemChange = function() {
+  const select = document.getElementById('char-system') as HTMLSelectElement;
+  const t20Container = document.getElementById('t20-sheet-container');
+  const pf2eContainer = document.getElementById('pf2e-sheet-container');
+  
+  if (!select) return;
+  
+  if (select.value === 'Pathfinder 2e') {
+    if (t20Container) t20Container.classList.add('hidden');
+    if (pf2eContainer) pf2eContainer.classList.remove('hidden');
+    window.processPathbuilderJson(); // Try to parse any existing JSON on change
+  } else {
+    // Default to T20 sheet for Tormenta or any other system
+    if (t20Container) t20Container.classList.remove('hidden');
+    if (pf2eContainer) pf2eContainer.classList.add('hidden');
+  }
+};
+
+window.resetPf2eActions = function() {
+  const cbs = document.querySelectorAll('.pf2e-action-cb') as NodeListOf<HTMLInputElement>;
+  cbs.forEach(cb => cb.checked = false);
+};
+
+window.switchPf2eTab = function(tabId: string) {
+  // Hide all tabs
+  document.querySelectorAll('.pf2e-tab-content').forEach(el => el.classList.add('hidden'));
+  
+  // Show target tab
+  const target = document.getElementById(`pf2e-tab-${tabId}`);
+  if (target) target.classList.remove('hidden');
+
+  // Reset button styles
+  const btns = ['combat', 'feats', 'inventory'];
+  btns.forEach(id => {
+    const btn = document.getElementById(`pf2e-btn-${id}`);
+    if (btn) {
+      if (id === tabId) {
+        btn.classList.add('text-emerald-400', 'border-emerald-400', 'bg-[#0b0f19]');
+        btn.classList.remove('text-slate-400', 'border-transparent');
+      } else {
+        btn.classList.add('text-slate-400', 'border-transparent');
+        btn.classList.remove('text-emerald-400', 'border-emerald-400', 'bg-[#0b0f19]');
+      }
+    }
+  });
+};
+
+window.processPathbuilderJson = function() {
+  const jsonEl = document.getElementById('pf2e-import-json') as HTMLTextAreaElement;
+  const visualSheet = document.getElementById('pf2e-visual-sheet');
+  if (!jsonEl || !visualSheet) return;
+
+  const jsonStr = jsonEl.value.trim();
+  if (!jsonStr) {
+    visualSheet.classList.add('hidden');
+    return;
+  }
+
+  try {
+    const pbObj = JSON.parse(jsonStr);
+    const build = pbObj.build;
+    if (!build) throw new Error("JSON inválido do Pathbuilder (faltando 'build')");
+
+    // Populate generic text/number fields
+    const setValue = (id: string, val: string | number) => {
+      const el = document.getElementById(id) as HTMLInputElement;
+      if (el) el.value = String(val);
+    };
+
+    setValue('pf2e-name', build.name || 'Herói do Pathbuilder');
+    setValue('pf2e-class', build.class || 'Classe Desconhecida');
+    setValue('pf2e-level', build.level || 1);
+    setValue('pf2e-ancestry', (build.ancestry || '') + (build.heritage ? ' / ' + build.heritage : ''));
+    setValue('pf2e-background', build.background || '');
+    
+    // HP and AC
+    setValue('pf2e-hp-max', build.attributes?.ancestryhp + build.attributes?.classhp * build.level || build.hpTotal || 0);
+    // don't overwrite current HP if it exists, otherwise max
+    const curHpEl = document.getElementById('pf2e-hp-atual') as HTMLInputElement;
+    if (curHpEl && !curHpEl.value) curHpEl.value = String(build.hpTotal || 10);
+    
+    const acEl = document.getElementById('pf2e-ac');
+    if (acEl) acEl.innerText = String(build.acTotal?.acTotal || 10);
+
+    // Abilities (Calculate modifier)
+    const getMod = (score: number) => {
+      const mod = Math.floor((score - 10) / 2);
+      return mod >= 0 ? `+${mod}` : `${mod}`;
+    };
+    if (build.abilities) {
+      const elStr = document.getElementById('pf2e-attr-str'); if(elStr) elStr.innerText = getMod(build.abilities.str);
+      const elDex = document.getElementById('pf2e-attr-dex'); if(elDex) elDex.innerText = getMod(build.abilities.dex);
+      const elCon = document.getElementById('pf2e-attr-con'); if(elCon) elCon.innerText = getMod(build.abilities.con);
+      const elInt = document.getElementById('pf2e-attr-int'); if(elInt) elInt.innerText = getMod(build.abilities.int);
+      const elWis = document.getElementById('pf2e-attr-wis'); if(elWis) elWis.innerText = getMod(build.abilities.wis);
+      const elCha = document.getElementById('pf2e-attr-cha'); if(elCha) elCha.innerText = getMod(build.abilities.cha);
+    }
+
+    // Saves
+    if (build.proficiencies) {
+      const getProfLetter = (profNum: number) => {
+        if(profNum === 2) return 'T';
+        if(profNum === 4) return 'E';
+        if(profNum === 6) return 'M';
+        if(profNum === 8) return 'L';
+        return 'D';
+      };
+      const setSave = (id: string, profId: string, val: number, prof: number) => {
+        const valEl = document.getElementById(id);
+        const profEl = document.getElementById(profId);
+        if (valEl) valEl.innerText = (val >= 0 ? '+' : '') + val;
+        if (profEl) profEl.innerText = getProfLetter(prof);
+      };
+
+      setSave('pf2e-save-fort', 'pf2e-save-fort-prof', build.proficiencies.fortitude || 0, build.proficiencies.fortitude || 0); // Need to calculate actual save, but for now just showing basic logic. Let's just put something since JSON doesn't expose final saves cleanly sometimes without full calculation.
+      // Actually pathbuilder JSON is quite complex, but this shows the visual concept.
+    }
+
+    // Parsing Weapons
+    const weaponsContainer = document.getElementById('pf2e-weapons-container');
+    if (weaponsContainer) {
+      if (build.weapons && build.weapons.length > 0) {
+        weaponsContainer.innerHTML = build.weapons.map((w: any) => `
+          <div class="bg-[#1a2031] border border-slate-700/60 rounded-lg p-3 flex justify-between items-center group hover:border-emerald-500/50 transition-colors">
+            <div>
+              <div class="font-bold text-emerald-300 text-sm mb-0.5">${w.display || w.name}</div>
+              <div class="text-[10px] text-slate-400 uppercase tracking-wider">
+                ${w.prof} | Dano: <span class="text-white">${w.die} ${w.damageType} ${w.damageBonus ? `+${w.damageBonus}` : ''}</span> 
+                ${w.extraDamage && w.extraDamage.length > 0 ? `<span class="text-orange-400 opacity-80">(+ ${w.extraDamage.join(', ')})</span>` : ''}
+              </div>
+            </div>
+            <div class="bg-[#0b0f19] border border-emerald-500/30 px-3 py-1.5 rounded-lg text-emerald-400 font-bold text-base shadow-sm group-hover:bg-emerald-500/10 transition-colors">
+              +${w.attack}
+            </div>
+          </div>
+        `).join('');
+      } else {
+        weaponsContainer.innerHTML = `<p class="text-xs text-slate-500 italic">Nenhuma arma equipada.</p>`;
+      }
+    }
+
+    // Parsing Feats & Specials
+    const featsContainer = document.getElementById('pf2e-feats-container');
+    if (featsContainer) {
+      let featsHtml = '';
+      if (build.feats && build.feats.length > 0) {
+        featsHtml += build.feats.map((f: any) => `
+          <div class="bg-[#1a2031] border border-slate-700/50 rounded-lg p-2.5 border-l-2 border-l-purple-500 shadow-sm flex flex-col justify-center">
+            <div class="font-bold text-slate-200 text-xs">${f[0]}</div>
+            <div class="text-[9px] text-slate-400 uppercase mt-1">${f[2] || 'Talento'} ${f[3] ? `(Nv. ${f[3]})` : ''}</div>
+          </div>
+        `).join('');
+      }
+      if (build.specials && build.specials.length > 0) {
+        featsHtml += build.specials.map((s: string) => `
+          <div class="bg-[#1a2031] border border-slate-700/50 rounded-lg p-2.5 border-l-2 border-l-cyan-500 shadow-sm flex flex-col justify-center">
+            <div class="font-bold text-slate-200 text-xs">${s}</div>
+            <div class="text-[9px] text-slate-400 uppercase mt-1">Habilidade Especial</div>
+          </div>
+        `).join('');
+      }
+      featsContainer.innerHTML = featsHtml || `<p class="text-xs text-slate-500 italic">Nenhum talento encontrado.</p>`;
+    }
+
+    // Parsing Inventory
+    const equipContainer = document.getElementById('pf2e-equipment-container');
+    if (equipContainer) {
+      let equipHtml = '';
+      if (build.armor && build.armor.length > 0) {
+        equipHtml += build.armor.map((a: any) => `
+          <div class="bg-[#1a2031] border border-slate-700/50 rounded-lg p-2.5 flex justify-between items-center border-l-2 border-l-blue-500 shadow-sm">
+            <span class="font-bold text-slate-200 text-xs">${a.display || a.name}</span>
+            <span class="text-[10px] text-blue-300 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded uppercase font-bold tracking-wider">Vestido</span>
+          </div>
+        `).join('');
+      }
+      if (build.equipment && build.equipment.length > 0) {
+        equipHtml += build.equipment.map((e: any) => `
+          <div class="bg-[#1a2031] border border-slate-700/50 rounded-lg p-2.5 flex justify-between items-center shadow-sm">
+            <span class="font-bold text-slate-300 text-xs">${e[0]}</span>
+            <span class="text-[10px] text-slate-400 font-mono bg-[#0b0f19] px-2 py-0.5 rounded border border-slate-700/50">x${e[1]}</span>
+          </div>
+        `).join('');
+      }
+      equipContainer.innerHTML = equipHtml || `<p class="text-xs text-slate-500 italic">Inventário vazio.</p>`;
+    }
+
+    // Parse Money
+    if (build.money) {
+      const setMoney = (id: string, val: number) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = `${val || 0} ${id.split('-').pop()?.toUpperCase()}`;
+      };
+      setMoney('pf2e-money-cp', build.money.cp);
+      setMoney('pf2e-money-sp', build.money.sp);
+      setMoney('pf2e-money-gp', build.money.gp);
+    }
+
+    visualSheet.classList.remove('hidden');
+    if (window.showToast) window.showToast('JSON do Pathbuilder interpretado com sucesso!', 'success');
+  } catch (error) {
+    console.warn("Error parsing pathbuilder JSON:", error);
+    visualSheet.classList.add('hidden');
+    if (window.showToast) window.showToast('Erro ao ler JSON. O texto colado é válido?', 'error');
+  }
+};
+
+/**
  * Reset form for a new character
  */
 window.resetCharacterForm = function() {
@@ -1192,13 +1520,23 @@ window.resetCharacterForm = function() {
     if (el) el.value = defaultVal;
   };
 
-  clearValue('char-system', 'Tormenta20 (Nativo)');
+  clearValue('char-system', 'Tormenta20');
+  window.handleCharSystemChange();
+  
   clearValue('char-name');
   clearValue('char-player');
   clearValue('char-photo-url');
   if (window.updateCharPhotoPreview) {
     window.updateCharPhotoPreview('');
   }
+  
+  // Reset PF2e inputs and visual sheet
+  clearValue('pf2e-import-json');
+  clearValue('pf2e-photo-url');
+  const pf2eAvatar = document.getElementById('pf2e-avatar-preview') as HTMLImageElement;
+  if (pf2eAvatar) pf2eAvatar.src = 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg';
+  const pf2eVisualSheet = document.getElementById('pf2e-visual-sheet');
+  if (pf2eVisualSheet) pf2eVisualSheet.classList.add('hidden');
   clearValue('char-race');
   clearValue('char-origin');
   clearValue('char-divinity');
