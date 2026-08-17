@@ -1,5 +1,10 @@
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
+
+(window as any).db = db;
+(window as any).doc = doc;
+(window as any).setDoc = setDoc;
+
 // Prevent deepCloneSafe ReferenceError
 (window as any).deepCloneSafe = function(obj: any) {
   if (obj === null || typeof obj !== 'object') return obj;
@@ -320,10 +325,11 @@ export function getRoleBadgeHtml(role: string, isMe = false, paddingX = 'px-1.5'
  * Update UI across header, sidebar, account modal and options modal with logged in user data
  */
 function updateAppUIWithProfile(profile: UserProfileData | null, gUser: any | null) {
+  (window as any).updateAppUIWithProfile = updateAppUIWithProfile;
   const username = profile?.username || 'Aguardando para encarnar...';
   const email = profile?.email || gUser?.email || 'No momento você é esse bostinha acima aguardando para começar a existir...';
   const photo = profile?.photoURL || gUser?.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif';
-  const role = profile?.role || (gUser ? 'JOGADOR' : 'CONVIDADO');
+  const role = profile?.role || (gUser ? 'PLAYER' : 'CONVIDADO');
 
   // Window references
   window.currentUserProfile = profile;
@@ -669,7 +675,7 @@ function sendPresenceHeartbeat(isOnline = true) {
   const uid = currentGoogleUser?.uid || getLocalSessionId();
   const username = currentUserProfile?.username || (currentGoogleUser ? currentGoogleUser.displayName : null) || 'Aguardando para encarnar...';
   const photoURL = currentUserProfile?.photoURL || currentGoogleUser?.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif';
-  const role = currentUserProfile?.role || (currentGoogleUser ? 'JOGADOR' : 'CONVIDADO');
+  const role = currentUserProfile?.role || (currentGoogleUser ? 'PLAYER' : 'CONVIDADO');
 
   updateUserPresence({
     uid,
@@ -763,7 +769,7 @@ function renderOnlineMembers(users: PresenceData[]) {
       uid: currentUid,
       username: currentUserProfile?.username || (currentGoogleUser ? currentGoogleUser.displayName : null) || 'Você (Aventureiro)',
       photoURL: currentUserProfile?.photoURL || currentGoogleUser?.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif',
-      role: currentUserProfile?.role || (currentGoogleUser ? 'JOGADOR' : 'CONVIDADO'),
+      role: currentUserProfile?.role || (currentGoogleUser ? 'PLAYER' : 'CONVIDADO'),
       isOnline: true,
       statusText: 'No Menu Principal'
     } as PresenceData);
@@ -804,7 +810,7 @@ function renderOnlineMembers(users: PresenceData[]) {
   const usersHtml = displayUsers.map(user => {
     const isMe = user.uid === currentUid;
     const photo = user.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif';
-    let roleBadge = getRoleBadgeHtml(user.role || 'JOGADOR', isMe, 'px-1.5', 'py-0.2');
+    let roleBadge = getRoleBadgeHtml(user.role || 'PLAYER', isMe, 'px-1.5', 'py-0.2');
 
     return `
       <div class="inline-flex items-center space-x-2 bg-[#0d1122] hover:bg-[#161c34] border border-purple-500/30 hover:border-purple-500/60 rounded-full pl-1.5 pr-3 py-1 text-xs transition-all shadow-sm group cursor-default" title="${user.username} - ${user.statusText || 'Online'}">
@@ -878,7 +884,7 @@ onAuthStateChanged(auth, async (user) => {
         username: user.displayName?.replace(/\s+/g, '_').toLowerCase() || 'offline_user',
         usernameLower: user.displayName?.replace(/\s+/g, '_').toLowerCase() || 'offline_user',
         photoURL: user.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif',
-        role: 'JOGADOR',
+        role: 'PLAYER',
         updatedAt: null
       }, user);
       if (window.showToast) {
@@ -8406,7 +8412,7 @@ window.useConsumableItem = async function(itemIndex: number) {
         senderUid: char.id || 'player',
         senderName: char.name || 'Personagem',
         senderRole: 'player',
-        senderUserRole: window.currentUserProfile?.role || 'JOGADOR',
+        senderUserRole: window.currentUserProfile?.role || 'PLAYER',
         characterName: char.name || 'Personagem',
         type: 'action',
         content: `🧪 **${char.name || 'Personagem'}** utilizou **1x ${itemName}**${effectText}!`
@@ -8522,7 +8528,7 @@ window.handleSendSessionMessage = async function(e: Event) {
       senderUid: (window.currentUserProfile?.uid || 'guest'),
       senderName,
       senderRole,
-      senderUserRole: window.currentUserProfile?.role || 'JOGADOR',
+      senderUserRole: window.currentUserProfile?.role || 'PLAYER',
       characterName: charName,
       type: (currentActionMode === 'narrator' ? 'narrative' : currentActionMode) as 'narrative' | 'speech' | 'action' | 'thought' | 'roll' | 'combat' | 'item' | 'system',
       content
@@ -8589,7 +8595,7 @@ window.quickRollDice = async function(formula: string, label: string) {
       senderUid: (window.currentUserProfile?.uid || 'guest'),
       senderName: charName,
       senderRole: 'player',
-      senderUserRole: window.currentUserProfile?.role || 'JOGADOR',
+      senderUserRole: window.currentUserProfile?.role || 'PLAYER',
       characterName: charName,
       type: 'roll',
       content: rollContent,
@@ -8656,7 +8662,7 @@ window.rollCharacterAttack = async function(weaponName: string, atkBonus: number
       senderUid: (window.currentUserProfile?.uid || 'guest'),
       senderName: charName,
       senderRole: 'player',
-      senderUserRole: window.currentUserProfile?.role || 'JOGADOR',
+      senderUserRole: window.currentUserProfile?.role || 'PLAYER',
       characterName: charName,
       type: 'roll',
       content: msg,
@@ -8935,7 +8941,7 @@ window.renderSessionMessages = function(messages: SessionMessage[]) {
     const isThought = msg.type === 'thought';
 
     let cardBg = 'bg-[#0b0f1d] border-purple-500/25';
-    const userRole = msg.senderUserRole || 'JOGADOR';
+    const userRole = msg.senderUserRole || 'PLAYER';
     let roleBadge = window.getRoleBadgeHtml ? window.getRoleBadgeHtml(userRole, false, 'px-1.5', 'py-0.2') : `<span class="bg-green-950/20 text-green-300 border border-green-500/40 text-[9px] font-mono px-1.5 py-0.2 rounded font-bold uppercase">${userRole}</span>`;
 
     if (!isNarrator && !isSystem && !isRoll && !isAurora) {
@@ -8986,7 +8992,7 @@ if (isThought) {
       formattedContent = `${iconPrefix}${formattedContent}`;
     }
 
-    const viewerRole = window.currentUserProfile?.role || 'JOGADOR';
+    const viewerRole = window.currentUserProfile?.role || 'PLAYER';
     const canDelete = viewerRole === 'OWNER' || viewerRole === 'ADM';
     const deleteBtn = canDelete ? `<button onclick="window.deleteSessionMessage('${msg.id || ''}')" class="text-slate-500 hover:text-red-400 ml-2" title="Excluir"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg></button>` : '';
 
@@ -9357,7 +9363,7 @@ function renderAdminUserList() {
     const isOnline = presence?.isOnline;
     const statusDot = isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600';
     const timeStatus = isOnline ? (presence?.statusText || 'Online') : 'Offline';
-    const roleBadge = window.getRoleBadgeHtml ? window.getRoleBadgeHtml(user.role || 'JOGADOR', false, 'px-1.5', 'py-0.2') : user.role;
+    const roleBadge = window.getRoleBadgeHtml ? window.getRoleBadgeHtml(user.role || 'PLAYER', false, 'px-1.5', 'py-0.2') : user.role;
 
     return `
       <button onclick="loadAdminUserDetails('${user.uid}')" class="w-full text-left bg-cosmic-950 hover:bg-purple-950/30 border border-purple-500/20 hover:border-purple-500/50 p-3 rounded-xl transition-all flex items-center space-x-3 group">
@@ -9398,8 +9404,8 @@ window.loadAdminUserDetails = async function(uid: string) {
       getUserUploadedFilesAdmin(uid)
     ]);
 
-    const roleOptions = ['OWNER', 'ADM', 'STAFF', 'JOGADOR'].map(r => {
-      const selected = (user.role || 'JOGADOR') === r ? 'selected' : '';
+    const roleOptions = ['OWNER', 'ADM', 'STAFF', 'PLAYER'].map(r => {
+      const selected = (user.role || 'PLAYER') === r ? 'selected' : '';
       return `<option value="${r}" ${selected}>${r}</option>`;
     }).join('');
 

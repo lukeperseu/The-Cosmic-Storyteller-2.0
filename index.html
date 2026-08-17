@@ -4061,24 +4061,39 @@
       if (optAvatar) optAvatar.src = playerProfile.avatarUrl;
     }
 
-    function saveProfileOptions() {
-      const nameInput = document.getElementById('input-username');
+async function saveProfileOptions() {
       const urlInput = document.getElementById('input-avatar-url');
       const enterCheck = document.getElementById('check-enter-send');
 
-      if (nameInput && nameInput.value.trim()) {
-        playerProfile.name = nameInput.value.trim();
+      if (urlInput && urlInput.value.trim() && window.currentGoogleUser) {
+        try {
+          const newUrl = urlInput.value.trim();
+          
+          // Import from auth-app context safely
+          if (window.db && window.doc && window.setDoc && window.currentGoogleUser) {
+            const userRef = window.doc(window.db, 'users', window.currentGoogleUser.uid);
+            await window.setDoc(userRef, { photoURL: newUrl }, { merge: true });
+            
+            if (window.currentUserProfile) {
+              window.currentUserProfile.photoURL = newUrl;
+              if (window.updateAppUIWithProfile) {
+                window.updateAppUIWithProfile(window.currentUserProfile, window.currentGoogleUser);
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Failed to save avatar", e);
+          showToast('Erro ao salvar avatar no banco de dados.', 'error');
+          return;
+        }
       }
-      if (urlInput && urlInput.value.trim()) {
-        playerProfile.avatarUrl = urlInput.value.trim();
-      }
-      if (enterCheck) {
-        playerProfile.enterSend = enterCheck.checked;
+      
+      if (enterCheck && window.currentUserProfile) {
+         // playerProfile.enterSend = enterCheck.checked;
       }
 
-      updateProfileUI();
       closeModal('options-modal');
-      showToast('Profile atualizado com sucesso!');
+      showToast('Avatar e opções atualizados com sucesso!');
     }
 
     // Sidebar drawer toggle

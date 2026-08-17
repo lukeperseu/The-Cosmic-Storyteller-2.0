@@ -213,7 +213,7 @@ export async function registerCustomUsername(
     });
 
     const existingRole = existingUserSnap.exists() ? existingUserSnap.data()?.role : null;
-    let roleToSet = existingRole || 'JOGADOR';
+    let roleToSet = existingRole || 'PLAYER';
     if (user.email === 'lukeperseu@gmail.com') {
       roleToSet = 'OWNER';
     }
@@ -232,7 +232,7 @@ export async function registerCustomUsername(
     transaction.set(userRef, profileData, { merge: true });
   });
 
-  const finalRole = user.email === 'lukeperseu@gmail.com' ? 'OWNER' : 'JOGADOR';
+  const finalRole = user.email === 'lukeperseu@gmail.com' ? 'OWNER' : 'PLAYER';
 
   return {
     uid: user.uid,
@@ -433,7 +433,7 @@ export async function updateUserPresence(info: {
       uid: info.uid,
       username: info.username || 'Aventureiro',
       photoURL: info.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif',
-      role: info.role || 'JOGADOR',
+      role: info.role || 'PLAYER',
       lastSeen: serverTimestamp(),
       isOnline: info.isOnline !== undefined ? info.isOnline : true,
       statusText: info.statusText || 'No Menu Principal'
