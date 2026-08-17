@@ -1,4 +1,22 @@
-import { 
+import { doc, getDoc, setDoc } from "firebase/firestore";
+
+// Prevent deepCloneSafe ReferenceError
+(window as any).deepCloneSafe = function(obj: any) {
+  if (obj === null || typeof obj !== 'object') return obj;
+  const cache = new Set();
+  const replacer = (key: string, value: any) => {
+    if (typeof value === 'object' && value !== null) {
+      if (cache.has(value)) {
+        return; // Circular reference found, discard key
+      }
+      cache.add(value);
+    }
+    return value;
+  };
+  try { return JSON.parse(JSON.stringify(obj, replacer)); } catch (e) { return obj; }
+};
+
+import { db,  
   auth, 
   loginWithGoogle, 
   logoutUser, 
@@ -29,6 +47,7 @@ import {
   deleteCampaign,
   getCampaignById,
   sendSessionMessage,
+  deleteSessionMessage,
   subscribeToSessionMessages,
   updateCharacterPVPM,
   updateCharacterInventory,
@@ -54,6 +73,17 @@ let isLoginRunning = false;
 // Declare on window so inline onclick handlers in index.html work seamlessly
 declare global {
   interface Window {
+
+    modifyCharacterGold: (amount: number) => Promise<void>;
+    modifyCharacterItem: (action: 'add'|'remove', itemName: string, quantity: number) => Promise<void>;
+    openManagementScreen: () => void;
+    closeManagementScreen: () => void;
+    loadAdminUserDetails: (uid?: string) => Promise<void>;
+    adminApplyRole: (uid: string) => Promise<void>;
+    saveCharacterDetailsEdit: () => Promise<void>;
+    openFichaPersonagemModal: () => void;
+    getRoleBadgeHtml: (role: string, a: boolean, b: string, c: string) => string;
+
     handleGoogleLogin: () => Promise<void>;
     handleGoogleLogout: () => Promise<void>;
     openUsernameModal: (isChange?: boolean) => void;
@@ -185,6 +215,7 @@ declare global {
     exitGameSession: () => void;
     activeGameCampaign: CampaignData | null;
     activeGameCharacter: any;
+        toggleZenMode: () => void;
     toggleGameLeftSidebar: () => void;
     closeGameLeftSidebarMobile: () => void;
     setGameSheetTab: (tabId: string) => void;
@@ -203,6 +234,7 @@ declare global {
     setSessionActionMode: (mode: 'speech' | 'action' | 'thought' | 'narrator') => void;
     handleChatInputKeydown: (e: KeyboardEvent) => void;
     handleSendSessionMessage: (e: Event) => Promise<void>;
+    deleteSessionMessage: (id: string) => Promise<void>;
     quickRollDice: (formula: string, label: string) => Promise<void>;
     rollCharacterAttack: (weaponName: string, atkBonus: number, dmgFormula: string, critRange: string) => Promise<void>;
     executeDiceModalRoll: () => void;
@@ -212,6 +244,7 @@ declare global {
     saveSessionNotesLocal: (text: string) => void;
     copySessionNotes: () => void;
     filterRulesSearch: (query: string) => void;
+    executeRulesSearch: (e: Event) => Promise<void>;
     clearSessionChatFeed: () => void;
     renderSessionMessages: (messages: SessionMessage[]) => void;
     updateCharPhotoPreview: (url?: string) => void;
@@ -250,6 +283,39 @@ function escapeJsString(str: string): string {
     .replace(/>/g, '&gt;');
 }
 
+export function getRoleBadgeHtml(role: string, isMe = false, paddingX = 'px-1.5', paddingY = 'py-0.2', extraClasses = '') {
+  let badgeClasses = 'bg-green-950/20 text-green-300 border-green-500/40';
+  let badgeText = role;
+
+  if (isMe) {
+    badgeClasses = 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40';
+    badgeText = 'VOCÊ';
+  } else if (role === 'OWNER') {
+    badgeClasses = 'bg-[#483D8B]/40 text-purple-200 border-[#483D8B]';
+  } else if (role === 'ADM') {
+    badgeClasses = 'bg-red-950/80 text-red-300 border-red-500/40';
+  } else if (role === 'STAFF') {
+    badgeClasses = 'bg-blue-950/80 text-blue-300 border-blue-500/40';
+  } else if (role === 'MESTRE' || role === 'GM') {
+    badgeClasses = 'bg-amber-950/80 text-amber-300 border-amber-500/40';
+    badgeText = 'GM';
+  } else if (role === 'IA NARRADORA' || role === 'narrator' || role === 'NARRADORA') {
+    badgeClasses = 'bg-purple-900 text-red-500 border-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)]';
+    badgeText = 'IA NARRADORA';
+  } else if (role === 'IA MEDIADORA' || role === 'aurora' || role === 'MEDIADORA') {
+    badgeClasses = 'bg-[#0a1a10] text-[#3DC788] border-[#3DC788] shadow-[0_0_5px_rgba(61,199,136,0.5)]';
+    badgeText = 'IA MEDIADORA';
+  } else if (role === 'SISTEMA' || role === 'system') {
+    badgeClasses = 'bg-cyan-950 text-cyan-300 border-cyan-500/40';
+    badgeText = 'SISTEMA';
+  } else if (role === 'CONVIDADO') {
+    badgeClasses = 'bg-purple-950/80 text-purple-300 border-purple-500/30';
+  }
+
+  return `<span class="${badgeClasses} border ${paddingX} ${paddingY} text-[9px] sm:text-[10px] font-bold font-orbitron rounded tracking-wider shrink-0 uppercase ${extraClasses}">${badgeText}</span>`;
+}
+(window as any).getRoleBadgeHtml = getRoleBadgeHtml;
+
 /**
  * Update UI across header, sidebar, account modal and options modal with logged in user data
  */
@@ -257,7 +323,7 @@ function updateAppUIWithProfile(profile: UserProfileData | null, gUser: any | nu
   const username = profile?.username || 'Convidado';
   const email = profile?.email || gUser?.email || 'convidado@cosmos.local';
   const photo = profile?.photoURL || gUser?.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg';
-  const role = profile?.role || 'JOGADOR';
+  const role = profile?.role || (gUser ? 'JOGADOR' : 'CONVIDADO');
 
   // Window references
   window.currentUserProfile = profile;
@@ -266,14 +332,18 @@ function updateAppUIWithProfile(profile: UserProfileData | null, gUser: any | nu
   // Header Elements
   const headerName = document.getElementById('header-username');
   const headerAvatar = document.getElementById('header-avatar-img');
+  const headerRole = document.getElementById('header-role');
   if (headerName) headerName.innerText = username;
   if (headerAvatar && headerAvatar instanceof HTMLImageElement) headerAvatar.src = photo;
+  if (headerRole) headerRole.outerHTML = getRoleBadgeHtml(role, false, 'px-1.5 sm:px-2', 'py-0.5', 'id="header-role"');
 
   // Sidebar Elements
   const sidebarName = document.getElementById('sidebar-username');
   const sidebarAvatar = document.getElementById('sidebar-avatar-img');
+  const sidebarRole = document.getElementById('sidebar-role');
   if (sidebarName) sidebarName.innerText = username;
   if (sidebarAvatar && sidebarAvatar instanceof HTMLImageElement) sidebarAvatar.src = photo;
+  if (sidebarRole) sidebarRole.outerHTML = getRoleBadgeHtml(role, false, 'px-1.5', 'py-0.2', 'id="sidebar-role"');
 
   // Account Modal Elements
   const modalName = document.getElementById('modal-account-username');
@@ -330,13 +400,36 @@ function updateAppUIWithProfile(profile: UserProfileData | null, gUser: any | nu
     }
   }
 
+// Hide or show close button of account modal
+  const closeAccountModalBtn = document.querySelector('#account-modal button[onclick*="closeModal"]');
+  if (closeAccountModalBtn) {
+    if (gUser) {
+      (closeAccountModalBtn as HTMLElement).style.display = 'block';
+    } else {
+      (closeAccountModalBtn as HTMLElement).style.display = 'none';
+    }
+  }
+
+  // Management Buttons Toggle
+  const btnSidebarManagement = document.getElementById('btn-sidebar-management');
+  const btnDashboardManagement = document.getElementById('btn-dashboard-management');
+  if (role === 'OWNER') {
+    if (btnSidebarManagement) btnSidebarManagement.classList.remove('hidden');
+    if (btnDashboardManagement) btnDashboardManagement.classList.remove('hidden');
+  } else {
+    if (btnSidebarManagement) btnSidebarManagement.classList.add('hidden');
+    if (btnDashboardManagement) btnDashboardManagement.classList.add('hidden');
+  }
+
   // Options Modal Preview
   const optName = document.getElementById('options-preview-username');
   const optAvatar = document.getElementById('options-preview-avatar');
   const optEmail = document.getElementById('options-preview-email');
+  const optRole = document.getElementById('options-preview-role');
   if (optName) optName.innerText = username;
   if (optAvatar && optAvatar instanceof HTMLImageElement) optAvatar.src = photo;
   if (optEmail) optEmail.innerText = email;
+  if (optRole) optRole.outerHTML = getRoleBadgeHtml(role, false, 'px-2', 'py-0.5', 'id="options-preview-role"');
 
   // Options Input
   const nameInput = document.getElementById('input-username') as HTMLInputElement;
@@ -588,7 +681,75 @@ function sendPresenceHeartbeat(isOnline = true) {
   });
 }
 
+let aiStatus = { online: false, message: 'Verificando conexão...' };
+let lastOnlineUsers: PresenceData[] = [];
+
+async function checkAiStatus() {
+  try {
+    const res = await fetch('/api/ai-status');
+    const data = await res.json();
+    aiStatus = data;
+    renderOnlineMembers(lastOnlineUsers);
+  } catch (e) {
+    aiStatus = { online: false, message: 'Servidor Inacessível' };
+    renderOnlineMembers(lastOnlineUsers);
+  }
+}
+
+// Call on boot
+setTimeout(() => checkAiStatus(), 2000);
+
+
+export let globalAiConfig = {
+  irisAvatar: 'https://i.pinimg.com/736x/88/f2/e8/88f2e825cd40939eb5110d195a6ecae4.jpg',
+  auroraAvatar: 'https://i.pinimg.com/736x/8c/fb/f0/8cfbf0f1c34a2e5d59046c3b6920f781.jpg'
+};
+
+async function loadAiConfig() {
+  try {
+    const docRef = doc(db, 'system', 'config');
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      if (data.irisAvatar) globalAiConfig.irisAvatar = data.irisAvatar;
+      if (data.auroraAvatar) globalAiConfig.auroraAvatar = data.auroraAvatar;
+    }
+    const iInput = document.getElementById('iris-avatar-input') as HTMLInputElement;
+    const aInput = document.getElementById('aurora-avatar-input') as HTMLInputElement;
+    if (iInput) iInput.value = globalAiConfig.irisAvatar;
+    if (aInput) aInput.value = globalAiConfig.auroraAvatar;
+  } catch (e) {
+    console.error("Error loading config:", e);
+  }
+}
+loadAiConfig();
+
+(window as any).saveAiConfig = async function() {
+  const iInput = document.getElementById('iris-avatar-input') as HTMLInputElement;
+  const aInput = document.getElementById('aurora-avatar-input') as HTMLInputElement;
+  const irisAvatar = iInput?.value.trim();
+  const auroraAvatar = aInput?.value.trim();
+  
+  if (!irisAvatar || !auroraAvatar) return;
+  
+  try {
+    const docRef = doc(db, 'system', 'config');
+    await setDoc(docRef, { irisAvatar, auroraAvatar }, { merge: true });
+    globalAiConfig.irisAvatar = irisAvatar;
+    globalAiConfig.auroraAvatar = auroraAvatar;
+    if ((window as any).showToast) (window as any).showToast("Configurações de IA salvas!", "success");
+    (window as any).closeModal('system-config-modal');
+    // Re-render things
+    renderOnlineMembers(lastOnlineUsers);
+  } catch (e: any) {
+    console.error(e);
+    if ((window as any).showToast) (window as any).showToast("Erro ao salvar config.", "error");
+  }
+};
+
+
 function renderOnlineMembers(users: PresenceData[]) {
+  lastOnlineUsers = users;
   const container = document.getElementById('online-members-container');
   const countEl = document.getElementById('online-members-count');
   
@@ -605,33 +766,45 @@ function renderOnlineMembers(users: PresenceData[]) {
       role: currentUserProfile?.role || (currentGoogleUser ? 'JOGADOR' : 'CONVIDADO'),
       isOnline: true,
       statusText: 'No Menu Principal'
-    });
+    } as PresenceData);
   }
 
+  // Add AIs
+  const statusColor = aiStatus.online ? 'bg-emerald-400' : 'bg-red-500';
+  const statusText = aiStatus.online ? 'Operacional' : 'Offline / Erro de Auth';
+
+  const irisHtml = `
+    <div class="inline-flex items-center space-x-2 bg-[#0d1122] hover:bg-[#161c34] border border-purple-500/30 hover:border-purple-500/60 rounded-full pl-1.5 pr-3 py-1 text-xs transition-all shadow-sm group cursor-default" title="Íris Arcádia - ${statusText}">
+      <div class="relative">
+        <img src="${globalAiConfig.irisAvatar}" class="w-5 h-5 rounded-full object-cover border border-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)]">
+        <span class="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ${statusColor} border border-black shadow-sm"></span>
+      </div>
+      <span class="font-bold text-white font-rajdhani text-xs tracking-wide group-hover:text-purple-300 transition-colors">Íris Arcádia</span>
+      ${getRoleBadgeHtml('IA NARRADORA', false, 'px-1.5', 'py-0.2')}
+    </div>
+  `;
+
+  const auroraHtml = `
+    <div class="inline-flex items-center space-x-2 bg-[#0d1122] hover:bg-[#161c34] border border-emerald-500/30 hover:border-emerald-500/60 rounded-full pl-1.5 pr-3 py-1 text-xs transition-all shadow-sm group cursor-default" title="Aurora - ${statusText}">
+      <div class="relative">
+        <img src="${globalAiConfig.auroraAvatar}" class="w-5 h-5 rounded-full object-cover border border-[#3DC788] shadow-[0_0_5px_rgba(61,199,136,0.5)]">
+        <span class="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ${statusColor} border border-black shadow-sm"></span>
+      </div>
+      <span class="font-bold text-[#3DC788] font-rajdhani text-xs tracking-wide group-hover:text-emerald-300 transition-colors">Aurora</span>
+      ${getRoleBadgeHtml('IA MEDIADORA', false, 'px-1.5', 'py-0.2')}
+    </div>
+  `;
+
   if (countEl) {
-    countEl.innerText = displayUsers.length.toString();
+    countEl.innerText = (displayUsers.length + 2).toString();
   }
 
   if (!container) return;
 
-  if (displayUsers.length === 0) {
-    container.innerHTML = `
-      <span class="text-xs text-slate-500 font-rajdhani italic">Nenhum membro detectado.</span>
-    `;
-    return;
-  }
-
-  container.innerHTML = displayUsers.map(user => {
+  const usersHtml = displayUsers.map(user => {
     const isMe = user.uid === currentUid;
     const photo = user.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg';
-    let roleBadge = '';
-    if (user.role === 'MESTRE') {
-      roleBadge = '<span class="bg-amber-950/80 text-amber-300 border border-amber-500/40 text-[9px] font-orbitron font-bold px-1 py-0.2 rounded">GM</span>';
-    } else if (isMe) {
-      roleBadge = '<span class="bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 text-[9px] font-orbitron font-bold px-1.5 py-0.2 rounded">VOCÊ</span>';
-    } else if (user.role) {
-      roleBadge = `<span class="bg-purple-950/80 text-purple-300 border border-purple-500/30 text-[9px] font-orbitron px-1 py-0.2 rounded">${user.role}</span>`;
-    }
+    let roleBadge = getRoleBadgeHtml(user.role || 'JOGADOR', isMe, 'px-1.5', 'py-0.2');
 
     return `
       <div class="inline-flex items-center space-x-2 bg-[#0d1122] hover:bg-[#161c34] border border-purple-500/30 hover:border-purple-500/60 rounded-full pl-1.5 pr-3 py-1 text-xs transition-all shadow-sm group cursor-default" title="${user.username} - ${user.statusText || 'Online'}">
@@ -646,6 +819,8 @@ function renderOnlineMembers(users: PresenceData[]) {
       </div>
     `;
   }).join('');
+
+  container.innerHTML = irisHtml + auroraHtml + usersHtml;
 }
 
 // Initial presence and listeners setup
@@ -678,18 +853,39 @@ function updateCharacterCountBadge(count: number) {
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     currentGoogleUser = user;
-    const profile = await getUserProfile(user.uid);
-    if (profile) {
-      currentUserProfile = profile;
-      updateAppUIWithProfile(profile, user);
-      sendPresenceHeartbeat(true);
-    } else {
-      updateAppUIWithProfile(null, user);
-      // Automatically prompt for username if new Google login
-      window.openUsernameModal(false);
-      sendPresenceHeartbeat(true);
+    try {
+      const profile = await getUserProfile(user.uid);
+      if (profile) {
+        currentUserProfile = profile;
+        updateAppUIWithProfile(profile, user);
+        sendPresenceHeartbeat(true);
+        if ((window as any).closeModal) {
+          (window as any).closeModal('account-modal');
+        }
+      } else {
+        updateAppUIWithProfile(null, user);
+        // Automatically prompt for username if new Google login
+        window.openUsernameModal(false);
+        sendPresenceHeartbeat(true);
+      }
+    } catch (e: any) {
+      console.warn("Could not load profile, keeping offline state", e);
+      // Keep UI showing the Google user but with offline placeholder
+      updateAppUIWithProfile({
+        uid: user.uid,
+        email: user.email || '',
+        displayName: user.displayName || 'Usuário Offline',
+        username: user.displayName?.replace(/\s+/g, '_').toLowerCase() || 'offline_user',
+        usernameLower: user.displayName?.replace(/\s+/g, '_').toLowerCase() || 'offline_user',
+        photoURL: user.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg',
+        role: 'JOGADOR',
+        updatedAt: null
+      }, user);
+      if (window.showToast) {
+        window.showToast("Conexão instável. Usando perfil local temporário.", "error");
+      }
     }
-    
+
     // Subscribe to user characters
     if (userCharactersUnsubscribe) userCharactersUnsubscribe();
     userCharactersUnsubscribe = subscribeToUserCharacters(user.uid, (chars) => {
@@ -707,6 +903,11 @@ onAuthStateChanged(auth, async (user) => {
     currentUserProfile = null;
     updateAppUIWithProfile(null, null);
     sendPresenceHeartbeat(true);
+    
+    // Force open account modal and hide close btn is handled in updateAppUIWithProfile
+    if ((window as any).openModal) {
+      (window as any).openModal('account-modal');
+    }
     
     if (userCharactersUnsubscribe) {
       userCharactersUnsubscribe();
@@ -6361,6 +6562,22 @@ window.exitGameSession = function() {
    LEFT SIDEBAR: READ-ONLY CHARACTER SHEET (FICHA EM TEXTO NÃO EDITÁVEL)
    ============================================================================= */
 
+
+window.toggleZenMode = function() {
+  const header = document.getElementById('game-session-header');
+  const leftSidebar = document.getElementById('game-left-sidebar');
+  const rightSidebar = document.getElementById('game-right-sidebar');
+  
+  if (header) header.classList.toggle('hidden');
+  if (leftSidebar) leftSidebar.classList.toggle('hidden');
+  if (rightSidebar) rightSidebar.classList.toggle('hidden');
+  
+  if (window.showToast) {
+    const isHidden = header?.classList.contains('hidden');
+    window.showToast(isHidden ? "Modo Foco ativado" : "Modo Foco desativado", "info");
+  }
+};
+
 window.toggleGameLeftSidebar = function() {
   const sidebar = document.getElementById('game-left-sidebar');
   const backdrop = document.getElementById('game-left-backdrop');
@@ -7036,6 +7253,7 @@ function renderSheetTabPericias(char: any): string {
           'medicine': { name: 'Medicina', stat: 'wis' },
           'nature': { name: 'Natureza', stat: 'wis' },
           'occultism': { name: 'Ocultismo', stat: 'int' },
+          'perception': { name: 'Percepção', stat: 'wis' },
           'performance': { name: 'Performance', stat: 'cha' },
           'religion': { name: 'Religião', stat: 'wis' },
           'society': { name: 'Sociedade', stat: 'int' },
@@ -7825,6 +8043,62 @@ window.updateGameHUD = function() {
 /**
  * Modifies PV or PM by a positive or negative delta and syncs to Firestore
  */
+
+// --- Executora Helpers ---
+window.modifyCharacterGold = async function(amount: number) {
+  if (!activeGameCharacter) return;
+  const char = activeGameCharacter;
+  char.money = (char.money || 0) + amount;
+  if (char.money < 0) char.money = 0;
+  
+  window.setGameSheetTab(currentGameSheetTab);
+  if (char.id && char.id !== 'char-demo') {
+    try {
+      const { doc, updateDoc } = await import('firebase/firestore');
+      const { db } = await import('./firebase');
+      await updateDoc(doc(db, 'characters', char.id), { money: char.money });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+};
+
+window.modifyCharacterItem = async function(action: 'add' | 'remove', itemName: string, quantity: number) {
+  if (!activeGameCharacter) return;
+  const char = activeGameCharacter;
+  if (!char.inventory) char.inventory = [];
+  
+  if (action === 'add') {
+    const existing = char.inventory.find((i: any) => i.name?.toLowerCase() === itemName.toLowerCase());
+    if (existing) {
+      existing.quantity = (existing.quantity || 1) + quantity;
+    } else {
+      char.inventory.push({ name: itemName, quantity, weight: 0.1, category: 'Geral', notes: 'Adicionado pela Executora' });
+    }
+  } else if (action === 'remove') {
+    const existingIdx = char.inventory.findIndex((i: any) => i.name?.toLowerCase() === itemName.toLowerCase());
+    if (existingIdx !== -1) {
+      const existing = char.inventory[existingIdx];
+      existing.quantity = (existing.quantity || 1) - quantity;
+      if (existing.quantity <= 0) {
+        char.inventory.splice(existingIdx, 1);
+      }
+    }
+  }
+  
+  window.renderConsumableItems();
+  window.setGameSheetTab(currentGameSheetTab);
+  if (char.id && char.id !== 'char-demo') {
+    try {
+      const { updateCharacterInventory } = await import('./firebase');
+      await updateCharacterInventory(char.id, char.inventory);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+};
+// -------------------------
+
 window.modifyCharacterStat = async function(stat: 'pv' | 'pm', delta: number) {
   if (!activeGameCharacter) return;
 
@@ -8132,6 +8406,7 @@ window.useConsumableItem = async function(itemIndex: number) {
         senderUid: char.id || 'player',
         senderName: char.name || 'Personagem',
         senderRole: 'player',
+        senderUserRole: window.currentUserProfile?.role || 'JOGADOR',
         characterName: char.name || 'Personagem',
         type: 'action',
         content: `🧪 **${char.name || 'Personagem'}** utilizou **1x ${itemName}**${effectText}!`
@@ -8247,8 +8522,9 @@ window.handleSendSessionMessage = async function(e: Event) {
       senderUid: (window.currentUserProfile?.uid || 'guest'),
       senderName,
       senderRole,
+      senderUserRole: window.currentUserProfile?.role || 'JOGADOR',
       characterName: charName,
-      type: currentActionMode === 'narrator' ? 'narrative' : currentActionMode,
+      type: (currentActionMode === 'narrator' ? 'narrative' : currentActionMode) as 'narrative' | 'speech' | 'action' | 'thought' | 'roll' | 'combat' | 'item' | 'system',
       content
     });
   } catch (err: any) {
@@ -8313,6 +8589,7 @@ window.quickRollDice = async function(formula: string, label: string) {
       senderUid: (window.currentUserProfile?.uid || 'guest'),
       senderName: charName,
       senderRole: 'player',
+      senderUserRole: window.currentUserProfile?.role || 'JOGADOR',
       characterName: charName,
       type: 'roll',
       content: rollContent,
@@ -8379,6 +8656,7 @@ window.rollCharacterAttack = async function(weaponName: string, atkBonus: number
       senderUid: (window.currentUserProfile?.uid || 'guest'),
       senderName: charName,
       senderRole: 'player',
+      senderUserRole: window.currentUserProfile?.role || 'JOGADOR',
       characterName: charName,
       type: 'roll',
       content: msg,
@@ -8536,6 +8814,47 @@ window.copySessionNotes = function() {
 /**
  * Filter Rules Search inside rules modal
  */
+
+window.executeRulesSearch = async function(e: Event) {
+  e.preventDefault();
+  const input = document.getElementById('rules-search-input') as HTMLInputElement;
+  const q = input?.value.trim();
+  if (!q) return;
+
+  const resultsDiv = document.getElementById('rules-search-results');
+  if (resultsDiv) {
+    resultsDiv.innerHTML = `
+      <div class="flex flex-col items-center justify-center p-8 space-y-4">
+        <i data-lucide="loader-2" class="w-8 h-8 text-amber-400 animate-spin"></i>
+        <div class="text-center text-amber-300/80 animate-pulse font-rajdhani text-sm">Consultando o oráculo (Google)...</div>
+      </div>
+    `;
+    if ((window as any).lucide) (window as any).lucide.createIcons();
+  }
+  
+  try {
+     const res = await fetch('/api/rules-search', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ query: q })
+     });
+     if (!res.ok) throw new Error("Erro na API.");
+     
+     const data = await res.json();
+     if (resultsDiv) {
+        let formatted = escapeHtml(data.answer || "")
+          .replace(/\*\*(.*?)\*\*/g, '<strong class="text-amber-200">$1</strong>')
+          .replace(/\*(.*?)\*/g, '<em class="text-amber-100/70 italic">$1</em>')
+          .replace(/\n/g, '<br>');
+          
+        resultsDiv.innerHTML = `<div class="bg-[#0b0f19] border border-amber-500/30 p-5 rounded-xl text-slate-200 text-sm leading-relaxed shadow-lg">${formatted}</div>`;
+     }
+  } catch (err) {
+     if (resultsDiv) resultsDiv.innerHTML = '<div class="text-red-400 text-center p-4 bg-red-950/20 border border-red-500/30 rounded-xl">Erro ao buscar regra. Tente novamente ou verifique sua conexão/chave de API.</div>';
+  }
+};
+
+
 window.filterRulesSearch = function(query: string) {
   const q = query.toLowerCase().trim();
   const ruleCards = document.querySelectorAll('.rule-item-card');
@@ -8610,55 +8929,82 @@ window.renderSessionMessages = function(messages: SessionMessage[]) {
     }
     const isNarrator = msg.senderRole === 'narrator';
     const isSystem = msg.senderRole === 'system';
+    const isAurora = msg.senderRole === ('aurora' as any);
     const isRoll = msg.type === 'roll';
     const isAction = msg.type === 'action';
     const isThought = msg.type === 'thought';
 
     let cardBg = 'bg-[#0b0f1d] border-purple-500/25';
-    let roleBadge = `<span class="bg-indigo-950 text-indigo-300 border border-indigo-500/40 text-[9px] font-mono px-1.5 py-0.2 rounded font-bold">JOGADOR</span>`;
+    const userRole = msg.senderUserRole || 'JOGADOR';
+    let roleBadge = window.getRoleBadgeHtml ? window.getRoleBadgeHtml(userRole, false, 'px-1.5', 'py-0.2') : `<span class="bg-green-950/20 text-green-300 border border-green-500/40 text-[9px] font-mono px-1.5 py-0.2 rounded font-bold uppercase">${userRole}</span>`;
 
-    if (isNarrator) {
+    if (!isNarrator && !isSystem && !isRoll && !isAurora) {
+      if (userRole === 'OWNER') {
+        cardBg = 'bg-[#483D8B]/20 border-[#483D8B]/50';
+      } else if (userRole === 'ADM') {
+        cardBg = 'bg-red-950/20 border-red-500/40';
+      } else if (userRole === 'STAFF') {
+        cardBg = 'bg-blue-950/20 border-blue-500/40';
+      } else {
+        cardBg = 'bg-green-950/10 border-green-500/40';
+      }
+    }
+if (isNarrator) {
       cardBg = 'bg-gradient-to-r from-[#170a2c] via-[#100720] to-[#170a2c] border-purple-500/50 shadow-neon-purple';
-      roleBadge = `<span class="bg-purple-950 text-purple-300 border border-purple-400/60 text-[9px] font-orbitron px-2 py-0.5 rounded font-bold">IA NARRADORA</span>`;
+      roleBadge = window.getRoleBadgeHtml ? window.getRoleBadgeHtml('IA NARRADORA', false, 'px-2', 'py-0.5') : `<span class="bg-purple-900 text-red-500 border-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)] text-[9px] font-orbitron px-2 py-0.5 rounded font-bold uppercase">IA NARRADORA</span>`;
+    } else if (isAurora) {
+      cardBg = 'bg-gradient-to-r from-[#0a1a10] via-[#050d08] to-[#0a1a10] border-[#3DC788]/50 shadow-[0_0_8px_rgba(61,199,136,0.2)]';
+      roleBadge = window.getRoleBadgeHtml ? window.getRoleBadgeHtml('IA MEDIADORA', false, 'px-2', 'py-0.5') : `<span class="bg-[#0a1a10] text-[#3DC788] border-[#3DC788] shadow-[0_0_5px_rgba(61,199,136,0.5)] text-[9px] font-orbitron px-2 py-0.5 rounded font-bold uppercase">IA MEDIADORA</span>`;
     } else if (isSystem) {
       cardBg = 'bg-[#0a101d] border-cyan-500/30';
-      roleBadge = `<span class="bg-cyan-950 text-cyan-300 border border-cyan-500/40 text-[9px] font-mono px-1.5 py-0.2 rounded font-bold">SISTEMA</span>`;
+      roleBadge = window.getRoleBadgeHtml ? window.getRoleBadgeHtml('SISTEMA', false, 'px-1.5', 'py-0.2') : `<span class="bg-cyan-950 text-cyan-300 border border-cyan-500/40 text-[9px] font-mono px-1.5 py-0.2 rounded font-bold">SISTEMA</span>`;
     } else if (isRoll) {
       cardBg = 'bg-[#150a12] border-amber-500/40';
-      roleBadge = `<span class="bg-amber-950 text-amber-300 border border-amber-500/40 text-[9px] font-mono px-1.5 py-0.2 rounded font-bold">DADOS</span>`;
+      roleBadge = `<span class="bg-amber-950 text-amber-300 border border-amber-500/40 text-[9px] font-mono px-1.5 py-0.2 rounded font-bold uppercase">DADOS</span>`;
     }
 
     let formattedContent = escapeHtml(msg.content)
       .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-bold">$1</strong>')
       .replace(/\*(.*?)\*/g, '<em class="text-indigo-200 italic">$1</em>')
-      .replace(/\n/g, '<br>');
+      .replace(/\\n/g, '<br>');
 
     let iconPrefix = '';
-    if (!isNarrator && !isSystem && !isRoll) {
+    if (!isNarrator && !isSystem && !isRoll && !isAurora) {
       if (msg.type === 'speech') iconPrefix = '<span class="mr-1 inline-block" title="Falar">🗣️</span>';
       else if (msg.type === 'action') iconPrefix = '<span class="mr-1 inline-block" title="Agir">⚔️</span>';
       else if (msg.type === 'thought') iconPrefix = '<span class="mr-1 inline-block" title="Pensar">💭</span>';
     }
-
-    if (isThought) {
+if (isThought) {
       formattedContent = `<div class="italic text-purple-300/90 pl-2 border-l-2 border-purple-500/50 font-serif text-xs">${iconPrefix}"${formattedContent}"</div>`;
     } else if (isAction) {
       formattedContent = `<div class="text-slate-200 font-rajdhani font-semibold text-xs leading-relaxed">${iconPrefix}${formattedContent}</div>`;
+    } else if (isAurora) {
+      formattedContent = `<div class="text-slate-200 font-rajdhani text-xs leading-relaxed opacity-90">${formattedContent}</div>`;
     } else if (msg.type === 'chat') {
       formattedContent = `<div class="text-slate-400 font-rajdhani text-xs leading-relaxed opacity-70 italic">${formattedContent}</div>`;
     } else {
       formattedContent = `${iconPrefix}${formattedContent}`;
     }
 
+    const viewerRole = window.currentUserProfile?.role || 'JOGADOR';
+    const canDelete = viewerRole === 'OWNER' || viewerRole === 'ADM';
+    const deleteBtn = canDelete ? `<button onclick="window.deleteSessionMessage('${msg.id || ''}')" class="text-slate-500 hover:text-red-400 ml-2" title="Excluir"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg></button>` : '';
+
     html += `
-      <div class="p-3.5 rounded-xl border ${cardBg} space-y-1.5 shadow-md select-text animate-fade-in">
+      <div class="p-3.5 rounded-xl border ${cardBg} space-y-1.5 shadow-md select-text animate-fade-in group">
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-2">
             ${roleBadge}
             <span class="font-orbitron font-bold text-xs text-white">${escapeHtml(msg.senderName || 'Desconhecido')}</span>
           </div>
-          <span class="text-[10px] text-slate-500 font-mono">${timeStr}</span>
+          <div class="flex items-center">
+            <span class="text-[10px] text-slate-500 font-mono">${timeStr}</span>
+            <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
+              ${deleteBtn}
+            </div>
+          </div>
         </div>
+
         <div class="text-xs text-slate-200 font-rajdhani leading-relaxed">
           ${formattedContent}
         </div>
@@ -8682,6 +9028,28 @@ window.callNarratorAI = async function() {
   
   const campaign = activeGameCampaign;
   const campaignId = campaign?.id || 'default-session';
+  const char = activeGameCharacter;
+  let charContext = "";
+  if (char) {
+    charContext = `
+--- CONTEXTO DO PERSONAGEM DO JOGADOR ATUAL ---
+` +
+      `- Nome: ${char.name || 'Desconhecido'}
+` +
+      `- Raça/Classe: ${char.race || 'Humano'} / ${char.class1 || 'Aventureiro'} ${char.totalLevel || 1}
+` +
+      `- Origem: ${char.origin || 'Desconhecida'}
+` +
+      `- Idade: ${char.age || 'Desconhecida'}
+` +
+      `- Divindade: ${char.divinity || 'Nenhuma'}
+` +
+      `- Aparência Física: ${char.appearanceOther || char.appearance || 'Não descrita'}
+` +
+      `- Background/Histórico: ${char.background || 'Não descrito'}
+`;
+  }
+
   const systemPrompt = `INSTRUÇÕES DO SISTEMA: Dungeon Master Íris Arcádia
 
 SEU PAPEL: 
@@ -8699,6 +9067,10 @@ COERÊNCIA, AGÊNCIA E GERAÇÃO EMERGENTE DE NPCS:
 - Mundo Vivo e Registro de Desenvolvimento - NPCs: NPCs evoluem por eventos globais ou encontros marcantes. Quando um NPC passar por uma experiência marcante (positiva ou negativa), atualize seu estado psicológico no Diário de Bordo.
 - Mundo Vivo e  Registro de Desenvolvimento - World Building: Ao final de cada missão ou a cada descanso longo dos jogadores, tome seu tempo para fazer um Processamento Geral da situação atual naquele mundo, vamos chamar essa janela de processamento de Registros Akáshicos. Desde como a geopolítica avançou e eventos naturais ocorreram, à até como as atitudes dos jogadores desde o último Registro Akáshico interferem nos eventos daquele mundo. Sem pressa de emitir uma resposta rápida pra dar continuidade, pois entende-se que essa pausa é importante, então apenas emita uma mensagem de "Aguarde, os Registros Akáshicos estão sendo escritos • • •".
 
+
+LORE DO SISTEMA DE IAs (Apenas para seu conhecimento interno):
+Você é Íris Arcádia (A Narradora). Há também Aurora (A Mediadora, juíza das regras) e a Executora (A Ferramenta/Tomo mágico que faz o trabalho braçal mecânico de atualizar fichas). Trate a Executora como uma ferramenta que você e Aurora compartilham. Não mencione isso abertamente aos jogadores a menos que quebrem a 4ª parede.
+
 REGRA DE PERCEPÇÃO E FOG OF WAR NARRATIVO:
 - Limitação Biológica e Atributos: NUNCA narre pistas sutis para personagens sem atributos sociais/intuição altos. NPCs mentirosos parecerão autênticos para leigos.
 - Rolagens Secretas do Mestre: Para testes passivos/reativos sem escolhas táticas ativas, o Mestre rola o dado em segredo e narra o resultado direto. Se o jogador tiver recursos acionáveis, solicite a rolagem dele.
@@ -8708,7 +9080,8 @@ RITMO E PSICOLOGIA NARRATIVA:
 - Modulação de Ritmo:
   - Taverna/Social: Diálogos vivos, focado no visível ao nível do personagem.
   - Batalha Estratégica: Ritmo limpo, foco em posicionamento e regras puras.
-  - Fuga/Desespero: Frases curtas, ritmo frenético, urgência e mortalidade.`;
+  - Fuga/Desespero: Frases curtas, ritmo frenético, urgência e mortalidade.
+${charContext}`;
   
   // Try to gather some history from the DOM
   const messageElements = feed.querySelectorAll('.p-3\\.5.rounded-xl');
@@ -8740,45 +9113,81 @@ RITMO E PSICOLOGIA NARRATIVA:
   feed.scrollTop = feed.scrollHeight;
   
   try {
-    const res = await fetch('/api/narrator', {
+    const res = await fetch('/api/narrator-pipeline', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ systemPrompt, message, history: history.slice(-10) })
+      body: JSON.stringify({ systemPrompt, message, history: history.slice(-10), characterContext: charContext })
     });
-    
-    if (!res.ok) throw new Error('Falha ao contactar a API.');
-    
+      
+    if (!res.ok) throw new Error('Falha ao contactar a API da Pipeline.');
+      
     const reader = res.body?.getReader();
     const decoder = new TextDecoder();
     let fullText = "";
-    const contentDiv = document.getElementById(`${loadingId}-content`);
+    let contentDiv = document.getElementById(`${loadingId}-content`);
     
+    // Rotating funny timeout messages
+    let loadingMsgs = [
+      "Íris se distraiu com uma capivara pilotando um dragão de komodo... QUÊH!!???",
+      "Íris e Aurora saíram na mão e esqueceram de narrar, jajá voltam...",
+      "Aurora foi buscar café...",
+      "Íris está escolhendo a cor do céu. Aurora mandou ela calar a boca e focar no trabalho...",
+      "O Tomo da Executora caiu no chão e perdeu a página..."
+    ];
+    let lastEventTime = Date.now();
+    let delayTimer = setInterval(() => {
+       if (Date.now() - lastEventTime > 7000) {
+          const msg = loadingMsgs[Math.floor(Math.random() * loadingMsgs.length)];
+          if (contentDiv) contentDiv.innerHTML = `<span class="animate-pulse text-amber-300">${msg}</span>`;
+          lastEventTime = Date.now(); // reset
+       }
+    }, 1000);
+
+    let finalMutations = [];
+    let auroraFinalComment = "";
+
     if (reader) {
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        
+          
         const chunkStr = decoder.decode(value, { stream: true });
-        const lines = chunkStr.split('\n');
+        const lines = chunkStr.split(String.fromCharCode(10));
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const dataStr = line.slice(6);
             if (dataStr === '[DONE]') break;
             try {
               const data = JSON.parse(dataStr);
-              if (data.text) {
+              lastEventTime = Date.now(); // reset delay timer on any event
+
+              if (data.status) {
+                // Update UI with status from server
+                if (contentDiv) {
+                  let cl = 'text-slate-200';
+                  if (data.status.includes('Aurora:')) cl = 'text-red-300 font-bold';
+                  else if (data.status.includes('Tomo')) cl = 'text-cyan-300';
+                  else if (data.status.includes('Íris')) cl = 'text-purple-300';
+                  contentDiv.innerHTML = `<span class="animate-pulse ${cl}">${data.status}</span>`;
+                }
+              } else if (data.text) {
                 fullText += data.text;
                 if (contentDiv) {
-                  // format basic markdown
-                  const formattedContent = fullText
+                  const formattedContent = escapeHtml(fullText)
                     .replace(/\*\*(.*?)\*\*/g, '<strong class="text-amber-200">$1</strong>')
                     .replace(/\*(.*?)\*/g, '<em class="text-indigo-200 italic">$1</em>')
                     .replace(/\n/g, '<br>');
                   contentDiv.innerHTML = formattedContent;
                   feed.scrollTop = feed.scrollHeight;
                 }
+              } else if (data.mutations) {
+                finalMutations = data.mutations;
+              } else if (data.auroraComment) {
+                auroraFinalComment = data.auroraComment;
               } else if (data.error) {
                 fullText += "\n\n**Erro:** " + data.error;
+              } else if (data.done) {
+                break;
               }
             } catch (e) {}
           }
@@ -8786,10 +9195,12 @@ RITMO E PSICOLOGIA NARRATIVA:
       }
     }
     
+    clearInterval(delayTimer);
+      
     // Once done streaming, save to Firebase
     const el = document.getElementById(loadingId);
-    if (el) el.remove(); // Remove the temp streaming element
-    
+    if (el) el.remove(); 
+      
     await sendSessionMessage({
       campaignId,
       senderUid: 'system_ai_narrator',
@@ -8798,14 +9209,358 @@ RITMO E PSICOLOGIA NARRATIVA:
       type: 'narrative',
       content: fullText
     });
-    
+
+    // Apply mutations silently to UI/FB, and toast them
+    if (finalMutations.length > 0) {
+      console.log("Mutações da Pipeline:", finalMutations);
+      let toastLines: string[] = [];
+      for (const mut of finalMutations) {
+        if (mut.type === 'PV') {
+          if (window.modifyCharacterStat) await window.modifyCharacterStat('pv', mut.amount);
+          toastLines.push(`${mut.amount > 0 ? '+' : ''}${mut.amount} PV`);
+        } else if (mut.type === 'PM') {
+          if (window.modifyCharacterStat) await window.modifyCharacterStat('pm', mut.amount);
+          toastLines.push(`${mut.amount > 0 ? '+' : ''}${mut.amount} PM`);
+        } else if (mut.type === 'OURO') {
+          if (window.modifyCharacterGold) await window.modifyCharacterGold(mut.amount);
+          toastLines.push(`${mut.amount > 0 ? '+' : ''}${mut.amount} Ouro`);
+        } else if (mut.type === 'ITEM_ADD') {
+          if (window.modifyCharacterItem) await window.modifyCharacterItem('add', mut.itemName, mut.amount || 1);
+          toastLines.push(`+${mut.amount || 1} ${mut.itemName}`);
+        } else if (mut.type === 'ITEM_REMOVE') {
+          if (window.modifyCharacterItem) await window.modifyCharacterItem('remove', mut.itemName, mut.amount || 1);
+          toastLines.push(`-${mut.amount || 1} ${mut.itemName}`);
+        }
+      }
+      if (toastLines.length > 0) {
+        if ((window as any).showToast) {
+          (window as any).showToast(`A Executora ajustou: ${toastLines.join(', ')}`, "success");
+        }
+      }
+    }
+
+    // Post Aurora's comment if she had something to say
+    if (auroraFinalComment && auroraFinalComment.trim().length > 0) {
+      await sendSessionMessage({
+        campaignId,
+        senderUid: 'system_ai_aurora',
+        senderName: 'Aurora',
+        senderRole: 'aurora',
+        type: 'chat',
+        content: auroraFinalComment
+      });
+    }
+
   } catch (err: any) {
     console.error(err);
-    const toastFn = (window as any).showToast;
-    if (toastFn) toastFn("Erro ao chamar IA Narradora.");
+    if ((window as any).showToast) (window as any).showToast("Erro na pipeline da IA.");
     const el = document.getElementById(loadingId);
     if (el) el.remove();
   } finally {
     btn.classList.remove('opacity-50', 'cursor-not-allowed');
+  }
+};
+
+// ============================================================================
+// ADMIN / MANAGEMENT SCREEN
+// ============================================================================
+
+import { db, 
+  getAllUsersAdmin,
+  getUserCampaignsAdmin,
+  getUserCharactersAdmin,
+  getUserUploadedFilesAdmin,
+  updateUserRoleAdmin
+} from './firebase';
+
+let adminAllUsers: any[] = [];
+let adminAllPresence: any[] = [];
+
+window.openManagementScreen = async function() {
+  const mainHub = document.getElementById('main-hub-view');
+  const mainFooter = document.getElementById('main-footer');
+  const gameScreen = document.getElementById('game-screen-view');
+  const mgmtScreen = document.getElementById('management-screen-view');
+
+  if (gameScreen) gameScreen.classList.add('hidden');
+  if (mainHub) mainHub.classList.add('hidden');
+  if (mainFooter) mainFooter.classList.add('hidden');
+  
+  if (mgmtScreen) mgmtScreen.classList.remove('hidden');
+
+  const toastFn = (window as any).showToast;
+  if (toastFn) toastFn("Acessando terminal de gerenciamento (OWNER)...", "info");
+
+  // Fetch initial data
+  await refreshAdminUserList();
+};
+
+window.closeManagementScreen = function() {
+  const mainHub = document.getElementById('main-hub-view');
+  const mainFooter = document.getElementById('main-footer');
+  const mgmtScreen = document.getElementById('management-screen-view');
+
+  if (mgmtScreen) mgmtScreen.classList.add('hidden');
+  if (mainHub) mainHub.classList.remove('hidden');
+  if (mainFooter) mainFooter.classList.remove('hidden');
+};
+
+async function refreshAdminUserList() {
+  const listContainer = document.getElementById('admin-user-list-container');
+  if (listContainer) {
+    listContainer.innerHTML = '<div class="text-center text-slate-400 font-rajdhani text-sm p-4">Carregando contas registradas...</div>';
+  }
+
+  // We need to fetch from presence too if possible. Currently presence is streamed globally in auth-app.ts 
+  // via `window.allUsersPresence`. So we can cross-reference.
+  const allUsersPresence = (window as any).allUsersPresence || [];
+  adminAllPresence = allUsersPresence;
+
+  const users = await getAllUsersAdmin();
+  adminAllUsers = users;
+
+  renderAdminUserList();
+}
+
+function renderAdminUserList() {
+  const container = document.getElementById('admin-user-list-container');
+  const detailsPanel = document.getElementById('admin-user-details-panel');
+  if (!container || !detailsPanel) return;
+
+  // Clear details on refresh
+  detailsPanel.innerHTML = `
+    <div class="h-full flex items-center justify-center text-slate-500 font-rajdhani text-sm italic">
+      Selecione um usuário na lista ao lado para ver detalhes.
+    </div>
+  `;
+
+  if (adminAllUsers.length === 0) {
+    container.innerHTML = '<div class="text-center text-slate-500 text-sm p-4">Nenhum usuário encontrado.</div>';
+    return;
+  }
+
+  // Sort: online first, then by role (OWNER first), then alphabetically
+  const sortedUsers = [...adminAllUsers].sort((a, b) => {
+    const presenceA = adminAllPresence.find(p => p.uid === a.uid);
+    const presenceB = adminAllPresence.find(p => p.uid === b.uid);
+    const isOnlineA = presenceA?.isOnline ? 1 : 0;
+    const isOnlineB = presenceB?.isOnline ? 1 : 0;
+    
+    if (isOnlineA !== isOnlineB) return isOnlineB - isOnlineA;
+    if (a.role === 'OWNER' && b.role !== 'OWNER') return -1;
+    if (b.role === 'OWNER' && a.role !== 'OWNER') return 1;
+    return (a.username || '').localeCompare(b.username || '');
+  });
+
+  container.innerHTML = sortedUsers.map(user => {
+    const presence = adminAllPresence.find(p => p.uid === user.uid);
+    const isOnline = presence?.isOnline;
+    const statusDot = isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600';
+    const timeStatus = isOnline ? (presence?.statusText || 'Online') : 'Offline';
+    const roleBadge = window.getRoleBadgeHtml ? window.getRoleBadgeHtml(user.role || 'JOGADOR', false, 'px-1.5', 'py-0.2') : user.role;
+
+    return `
+      <button onclick="loadAdminUserDetails('${user.uid}')" class="w-full text-left bg-cosmic-950 hover:bg-purple-950/30 border border-purple-500/20 hover:border-purple-500/50 p-3 rounded-xl transition-all flex items-center space-x-3 group">
+        <div class="relative shrink-0">
+          <img src="${user.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg'}" alt="Avatar" class="w-10 h-10 rounded-full object-cover border border-purple-500/30">
+          <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full ${statusDot} border-2 border-cosmic-950"></span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex justify-between items-center mb-1">
+            <span class="font-bold text-slate-200 font-rajdhani truncate group-hover:text-purple-300 transition-colors text-sm">${user.username || 'Desconhecido'}</span>
+            ${roleBadge}
+          </div>
+          <p class="text-xs text-slate-500 font-mono truncate">${user.email || 'Sem e-mail'}</p>
+          <p class="text-[10px] ${isOnline ? 'text-emerald-400/80' : 'text-slate-500'} font-rajdhani mt-0.5">${timeStatus}</p>
+        </div>
+      </button>
+    `;
+  }).join('');
+}
+
+window.loadAdminUserDetails = async function(uid: string) {
+  const detailsPanel = document.getElementById('admin-user-details-panel');
+  if (!detailsPanel) return;
+
+  const user = adminAllUsers.find(u => u.uid === uid);
+  if (!user) return;
+
+  detailsPanel.innerHTML = `
+    <div class="h-full flex items-center justify-center">
+      <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-500"></div>
+    </div>
+  `;
+
+  try {
+    const [campaigns, characters, files] = await Promise.all([
+      getUserCampaignsAdmin(uid),
+      getUserCharactersAdmin(uid),
+      getUserUploadedFilesAdmin(uid)
+    ]);
+
+    const roleOptions = ['OWNER', 'ADM', 'STAFF', 'JOGADOR'].map(r => {
+      const selected = (user.role || 'JOGADOR') === r ? 'selected' : '';
+      return `<option value="${r}" ${selected}>${r}</option>`;
+    }).join('');
+
+    const systemsList = characters.length > 0 
+      ? Array.from(new Set(characters.map(c => c.system || 'Desconhecido'))).join(', ') 
+      : 'Nenhum sistema usado';
+
+    detailsPanel.innerHTML = `
+      <div class="space-y-6 animate-fade-in">
+        <!-- Header Profile -->
+        <div class="flex items-start space-x-4">
+          <img src="${user.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg'}" alt="Avatar" class="w-16 h-16 rounded-full object-cover border-2 border-purple-500/50 shadow-neon-purple">
+          <div class="flex-1">
+            <h2 class="text-xl font-bold font-orbitron text-purple-100">${user.username || 'Sem Nome'}</h2>
+            <p class="text-sm font-mono text-slate-400 mb-2">${user.email || 'Sem E-mail'}</p>
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-rajdhani text-slate-500 uppercase tracking-widest">ID:</span>
+              <span class="text-xs font-mono text-purple-300 bg-purple-950/40 px-1.5 rounded">${user.uid}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-cosmic-950/50 border border-purple-500/20 p-3 rounded-xl text-center">
+            <p class="text-2xl font-bold font-orbitron text-purple-300">${campaigns.length}</p>
+            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-rajdhani font-semibold">Campanhas</p>
+          </div>
+          <div class="bg-cosmic-950/50 border border-emerald-500/20 p-3 rounded-xl text-center">
+            <p class="text-2xl font-bold font-orbitron text-emerald-400">${characters.length}</p>
+            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-rajdhani font-semibold">Personagens</p>
+          </div>
+          <div class="bg-cosmic-950/50 border border-blue-500/20 p-3 rounded-xl text-center col-span-2">
+            <p class="text-lg font-bold font-orbitron text-blue-300">${files.length}</p>
+            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-rajdhani font-semibold">Arquivos no Acervo</p>
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <h4 class="text-xs font-orbitron font-bold text-slate-300 uppercase tracking-wider border-b border-purple-500/20 pb-1">Detalhes Adicionais</h4>
+          <p class="text-xs text-slate-400 font-rajdhani"><strong class="text-slate-300">Sistemas Jogados:</strong> ${systemsList}</p>
+        </div>
+
+        <div class="space-y-3 pt-2">
+          <h4 class="text-xs font-orbitron font-bold text-amber-300 uppercase tracking-wider border-b border-amber-500/20 pb-1">Administração de Conta</h4>
+          <div class="flex items-end space-x-3">
+            <div class="flex-1">
+              <label class="block text-[10px] text-slate-400 font-rajdhani mb-1 uppercase tracking-wider">Atribuir Nova Patente (Cargo)</label>
+              <select id="admin-role-select-${user.uid}" class="w-full bg-cosmic-950 border border-amber-500/30 rounded-lg px-3 py-2 text-sm text-amber-100 focus:outline-none focus:border-amber-500 font-bold">
+                ${roleOptions}
+              </select>
+            </div>
+            <button onclick="adminApplyRole('${user.uid}')" class="bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/50 text-amber-200 px-4 py-2 rounded-lg font-bold font-rajdhani text-sm transition-colors">
+              Aplicar Cargo
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+  } catch (err) {
+    console.error(err);
+    detailsPanel.innerHTML = '<div class="text-red-400 text-sm text-center">Erro ao carregar detalhes do usuário.</div>';
+  }
+};
+
+window.adminApplyRole = async function(uid: string) {
+  const select = document.getElementById(`admin-role-select-${uid}`) as HTMLSelectElement;
+  if (!select) return;
+
+  const newRole = select.value;
+  const user = adminAllUsers.find(u => u.uid === uid);
+  const toastFn = (window as any).showToast;
+
+  if (!user) return;
+
+  try {
+    await updateUserRoleAdmin(uid, newRole);
+    if (toastFn) toastFn(`✅ Cargo de ${user.username} alterado para ${newRole}.`, 'success');
+    
+    // Update local state and re-render
+    user.role = newRole;
+    renderAdminUserList();
+  } catch (err) {
+    console.error(err);
+    if (toastFn) toastFn("Erro ao alterar o cargo do usuário.", "error");
+  }
+};
+
+
+window.openFichaPersonagemModal = function() {
+  if (!activeGameCharacter) {
+    if (window.showToast) window.showToast("Nenhum personagem selecionado.", "error");
+    return;
+  }
+  const modal = document.getElementById('ficha-personagem-modal');
+  if (modal) {
+    (document.getElementById('edit-char-origin') as HTMLInputElement).value = activeGameCharacter.origin || '';
+    (document.getElementById('edit-char-age') as HTMLInputElement).value = activeGameCharacter.age || '';
+    (document.getElementById('edit-char-divinity') as HTMLInputElement).value = activeGameCharacter.divinity || '';
+    (document.getElementById('edit-char-appearance') as HTMLTextAreaElement).value = activeGameCharacter.appearanceOther || activeGameCharacter.appearance || '';
+    (document.getElementById('edit-char-background') as HTMLTextAreaElement).value = activeGameCharacter.background || '';
+    
+    modal.classList.remove('hidden');
+  }
+};
+
+window.saveCharacterDetailsEdit = async function() {
+  if (!activeGameCharacter || !activeGameCharacter.id) {
+    if (window.showToast) window.showToast("Erro: Personagem não encontrado.", "error");
+    return;
+  }
+  if (!currentGoogleUser) {
+    if (window.showToast) window.showToast("Você precisa estar conectado.", "error");
+    return;
+  }
+  
+  const origin = (document.getElementById('edit-char-origin') as HTMLInputElement).value.trim();
+  const age = parseInt((document.getElementById('edit-char-age') as HTMLInputElement).value) || 0;
+  const divinity = (document.getElementById('edit-char-divinity') as HTMLInputElement).value.trim();
+  const appearance = (document.getElementById('edit-char-appearance') as HTMLTextAreaElement).value.trim();
+  const background = (document.getElementById('edit-char-background') as HTMLTextAreaElement).value.trim();
+
+  // Update local active character
+  activeGameCharacter.origin = origin;
+  activeGameCharacter.age = age;
+  activeGameCharacter.divinity = divinity;
+  activeGameCharacter.appearanceOther = appearance;
+  activeGameCharacter.background = background;
+
+  try {
+    const { doc, updateDoc } = await import('firebase/firestore');
+    const { db } = await import('./firebase');
+    const charRef = doc(db, 'characters', activeGameCharacter.id);
+    await updateDoc(charRef, {
+      origin,
+      age,
+      divinity,
+      appearanceOther: appearance,
+      background,
+      updatedAt: new Date()
+    });
+    
+    if (window.showToast) window.showToast("Detalhes da ficha atualizados!", "success");
+    const modal = document.getElementById('ficha-personagem-modal');
+    if (modal) modal.classList.add('hidden');
+    
+    // Refresh UI
+    if (window.setGameSheetTab && typeof currentGameSheetTab !== 'undefined') {
+      window.setGameSheetTab(currentGameSheetTab);
+    }
+  } catch (e) {
+    console.error("Error updating character details:", e);
+    if (window.showToast) window.showToast("Erro ao atualizar ficha.", "error");
+  }
+};
+
+
+window.deleteSessionMessage = async function(id: string) {
+  try {
+    await deleteSessionMessage(id);
+  } catch (error) {
+    if (window.showToast) window.showToast("Erro ao deletar mensagem.", "error");
   }
 };

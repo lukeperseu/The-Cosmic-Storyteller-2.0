@@ -1,0 +1,11 @@
+const fs = require('fs');
+let content = fs.readFileSync('index.html', 'utf8');
+const lines = content.split('\n');
+const newLines = lines.slice(0, 1263);
+const fichaModal = fs.readFileSync('ficha-modal.html', 'utf8');
+newLines.push(fichaModal);
+newLines.push('  <!-- 2. MODAL: SUA CONTA ORDOS (SCREENSHOT 2) -->');
+newLines.push('  <div id="account-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">');
+const rest = lines.slice(1280);
+const finalContent = newLines.concat(rest).join('\n');
+fs.writeFileSync('index.html', finalContent, 'utf8');

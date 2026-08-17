@@ -1,4 +1,10 @@
-rules_version = '2';
+import sys
+
+with open('firestore.rules', 'r', encoding='utf-8') as f:
+    content = f.read()
+
+# I will rewrite the whole file to make sure it's structurally sound.
+new_content = """rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
@@ -61,3 +67,8 @@ service cloud.firestore {
     }
   }
 }
+"""
+
+with open('firestore.rules', 'w', encoding='utf-8') as f:
+    f.write(new_content)
+print("Rewritten firestore rules correctly")

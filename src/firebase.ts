@@ -187,30 +187,37 @@ export async function registerCustomUsername(
   const usernameLower = cleanUsername.toLowerCase();
   const uid = user.uid;
 
-  // Run as a Firestore transaction for strict atomic uniqueness
+// Run as a Firestore transaction for strict atomic uniqueness
   await runTransaction(db, async (transaction) => {
     const newUsernameRef = doc(db, 'usernames', usernameLower);
+    const userRef = doc(db, 'users', uid);
+    const oldUsernameRef = (oldUsername && oldUsername.toLowerCase() !== usernameLower) ? doc(db, 'usernames', oldUsername.toLowerCase()) : null;
+
+    // ALL READS MUST COME FIRST
     const newUsernameSnap = await transaction.get(newUsernameRef);
+    const existingUserSnap = await transaction.get(userRef);
 
     if (newUsernameSnap.exists() && newUsernameSnap.data().uid !== uid) {
       throw new Error("O nome de usuário acabou de ser reservado por outro jogador.");
     }
 
-    // If changing username, remove old username mapping
-    if (oldUsername && oldUsername.toLowerCase() !== usernameLower) {
-      const oldUsernameRef = doc(db, 'usernames', oldUsername.toLowerCase());
+    // ALL WRITES AFTER READS
+    if (oldUsernameRef) {
       transaction.delete(oldUsernameRef);
     }
 
-    // Reserve new username
     transaction.set(newUsernameRef, {
       uid: uid,
       username: cleanUsername,
       createdAt: serverTimestamp()
     });
 
-    // Create / Update User Document
-    const userRef = doc(db, 'users', uid);
+    const existingRole = existingUserSnap.exists() ? existingUserSnap.data()?.role : null;
+    let roleToSet = existingRole || 'JOGADOR';
+    if (user.email === 'lukeperseu@gmail.com') {
+      roleToSet = 'OWNER';
+    }
+
     const profileData: Partial<UserProfileData> = {
       uid: uid,
       email: user.email || '',
@@ -218,12 +225,14 @@ export async function registerCustomUsername(
       username: cleanUsername,
       usernameLower: usernameLower,
       photoURL: user.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg',
-      role: 'JOGADOR',
+      role: roleToSet,
       updatedAt: serverTimestamp()
     };
 
     transaction.set(userRef, profileData, { merge: true });
   });
+
+  const finalRole = user.email === 'lukeperseu@gmail.com' ? 'OWNER' : 'JOGADOR';
 
   return {
     uid: user.uid,
@@ -232,7 +241,7 @@ export async function registerCustomUsername(
     username: cleanUsername,
     usernameLower: usernameLower,
     photoURL: user.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg',
-    role: 'JOGADOR'
+    role: finalRole // This will be overwritten by a fetch if they are STAFF, but usually login is followed by fetch anyway
   };
 }
 
@@ -244,11 +253,21 @@ export async function getUserProfile(uid: string): Promise<UserProfileData | nul
     const userDocRef = doc(db, 'users', uid);
     const docSnap = await getDoc(userDocRef);
     if (docSnap.exists()) {
-      return docSnap.data() as UserProfileData;
+      const data = docSnap.data() as UserProfileData;
+      if (data.email === 'lukeperseu@gmail.com' && data.role !== 'OWNER') {
+        data.role = 'OWNER';
+        // Fire and forget update
+        setDoc(userDocRef, { role: 'OWNER' }, { merge: true }).catch(e => console.error("Auto-promote owner failed:", e));
+      }
+      return data;
     }
-    return null;
-  } catch (error) {
+    return null; // document doesn't exist
+  } catch (error: any) {
     console.error("Error fetching user profile:", error);
+    // If it's an offline error, throw it so we don't assume the user has no profile
+    if (error.message && error.message.includes('offline')) {
+      throw error;
+    }
     return null;
   }
 }
@@ -260,6 +279,7 @@ export interface CharacterClass {
 }
 
 export interface CharacterData {
+  pathbuilderJson?: string;
   userId: string;
   system: string;
   name: string;
@@ -741,9 +761,10 @@ export interface SessionMessage {
   campaignId: string;
   senderUid: string;
   senderName: string;
-  senderRole: 'narrator' | 'player' | 'system';
+  senderRole: 'narrator' | 'player' | 'system' | 'aurora';
+  senderUserRole?: string;
   characterName?: string;
-  type: 'narrative' | 'speech' | 'action' | 'thought' | 'roll' | 'combat' | 'item' | 'system';
+  type: 'narrative' | 'speech' | 'action' | 'thought' | 'roll' | 'combat' | 'item' | 'system' | 'chat';
   content: string;
   metadata?: {
     rollFormula?: string;
@@ -842,4 +863,77 @@ export async function updateCharacterInventory(charId: string, inventory: any[])
   }
 }
 
+// --- ADMIN / MANAGEMENT FUNCTIONS ---
+
+export async function getAllUsersAdmin(): Promise<UserProfileData[]> {
+  try {
+    const q = query(collection(db, 'users'));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfileData & { uid: string }));
+  } catch (err) {
+    console.error("Error fetching all users:", err);
+    return [];
+  }
+}
+
+export async function getUserCampaignsAdmin(uid: string): Promise<CampaignData[]> {
+  try {
+    const q = query(collection(db, 'campaigns'), where('createdBy', '==', uid));
+    const snap = await getDocs(q);
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CampaignData));
+  } catch (err) {
+    console.error("Error fetching user campaigns admin:", err);
+    return [];
+  }
+}
+
+export async function getUserCharactersAdmin(uid: string): Promise<(CharacterData & { id: string })[]> {
+  try {
+    const q = query(collection(db, 'characters'), where('userId', '==', uid));
+    const snap = await getDocs(q);
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as (CharacterData & { id: string })));
+  } catch (err) {
+    console.error("Error fetching user characters admin:", err);
+    return [];
+  }
+}
+
+export async function getUserUploadedFilesAdmin(uid: string): Promise<UploadedFileData[]> {
+  try {
+    const q = query(collection(db, 'uploadedFiles'), where('uploadedBy', '==', uid));
+    const snap = await getDocs(q);
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as UploadedFileData));
+  } catch (err) {
+    console.error("Error fetching user uploaded files admin:", err);
+    return [];
+  }
+}
+
+export async function updateUserRoleAdmin(uid: string, newRole: string): Promise<void> {
+  try {
+    const userRef = doc(db, 'users', uid);
+    await updateDoc(userRef, { role: newRole });
+    // Also update presence role so it reflects immediately
+    const presenceRef = doc(db, 'presence', uid);
+    await updateDoc(presenceRef, { role: newRole }).catch(() => {});
+  } catch (err) {
+    console.error("Error updating user role admin:", err);
+    throw err;
+  }
+}
+
 export { onAuthStateChanged };
+
+
+/**
+ * Deletes a session message by ID
+ */
+export async function deleteSessionMessage(messageId: string): Promise<void> {
+  try {
+    const msgRef = doc(db, 'campaign_messages', messageId);
+    await deleteDoc(msgRef);
+  } catch (error) {
+    console.error("Error deleting session message:", error);
+    throw error;
+  }
+}

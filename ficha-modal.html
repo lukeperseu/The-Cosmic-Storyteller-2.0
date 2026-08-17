@@ -1,0 +1,65 @@
+  <!-- MODAL: EDITOR DE FICHA COMPLETA -->
+  <div id="ficha-personagem-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-card w-full max-w-xl rounded-2xl overflow-hidden border border-purple-500/40 shadow-neon-purple animate-fade-in flex flex-col max-h-[90vh]">
+      
+      <!-- Modal Header -->
+      <div class="bg-gradient-to-r from-purple-950 to-cosmic-900 p-4 border-b border-purple-500/30 flex items-center justify-between shrink-0">
+        <div class="flex items-center space-x-3">
+          <div class="w-9 h-9 rounded-full bg-purple-900/80 border border-purple-500/50 flex items-center justify-center text-lg text-purple-300">
+            <i data-lucide="edit-3" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="font-orbitron font-bold text-base text-white">Editor de Ficha</h3>
+            <p class="text-xs text-purple-300">Complemente as informações narrativas</p>
+          </div>
+        </div>
+        <button onclick="closeModal('ficha-personagem-modal')" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      
+      <!-- Modal Body -->
+      <div class="p-5 space-y-4 overflow-y-auto custom-scrollbar">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <!-- Origem -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-orbitron font-bold text-purple-300">Origem / Antecedente</label>
+            <input type="text" id="edit-char-origin" placeholder="Ex: Nobre, Acólito, Forasteiro..." class="w-full bg-black/40 border border-purple-500/30 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 transition-all font-rajdhani">
+          </div>
+          <!-- Idade -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-orbitron font-bold text-purple-300">Idade</label>
+            <input type="number" id="edit-char-age" placeholder="Ex: 25" class="w-full bg-black/40 border border-purple-500/30 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 transition-all font-rajdhani">
+          </div>
+          <!-- Divindade -->
+          <div class="space-y-1.5 sm:col-span-2">
+            <label class="block text-xs font-orbitron font-bold text-purple-300">Divindade / Religião</label>
+            <input type="text" id="edit-char-divinity" placeholder="Ex: Nenhuma, Sarenrae, Iomedae..." class="w-full bg-black/40 border border-purple-500/30 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 transition-all font-rajdhani">
+          </div>
+        </div>
+
+        <!-- Aparência -->
+        <div class="space-y-1.5">
+          <label class="block text-xs font-orbitron font-bold text-purple-300">Descrição Física & Aparência</label>
+          <textarea id="edit-char-appearance" rows="3" placeholder="Descreva os detalhes físicos, roupas, cicatrizes..." class="w-full bg-black/40 border border-purple-500/30 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 transition-all font-rajdhani resize-none"></textarea>
+        </div>
+
+        <!-- Lore / Background -->
+        <div class="space-y-1.5">
+          <label class="block text-xs font-orbitron font-bold text-purple-300">Histórico & Lore (Background)</label>
+          <textarea id="edit-char-background" rows="4" placeholder="A história pregressa, motivações e vínculos do personagem..." class="w-full bg-black/40 border border-purple-500/30 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 transition-all font-rajdhani resize-none"></textarea>
+        </div>
+      </div>
+      
+      <!-- Modal Footer -->
+      <div class="p-4 border-t border-purple-500/30 bg-black/40 flex justify-end space-x-3 shrink-0">
+        <button onclick="closeModal('ficha-personagem-modal')" class="px-4 py-2 rounded-xl text-slate-300 font-rajdhani font-bold hover:text-white hover:bg-white/5 transition-colors text-sm">
+          Cancelar
+        </button>
+        <button onclick="window.saveCharacterDetailsEdit()" class="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-rajdhani font-bold shadow-lg shadow-purple-900/50 border border-purple-400/50 transition-all text-sm flex items-center space-x-2">
+          <i data-lucide="save" class="w-4 h-4"></i>
+          <span>Salvar Ficha</span>
+        </button>
+      </div>
+    </div>
+  </div>
