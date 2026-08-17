@@ -224,7 +224,7 @@ export async function registerCustomUsername(
       displayName: user.displayName || cleanUsername,
       username: cleanUsername,
       usernameLower: usernameLower,
-      photoURL: user.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg',
+      photoURL: user.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif',
       role: roleToSet,
       updatedAt: serverTimestamp()
     };
@@ -240,7 +240,7 @@ export async function registerCustomUsername(
     displayName: user.displayName || cleanUsername,
     username: cleanUsername,
     usernameLower: usernameLower,
-    photoURL: user.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg',
+    photoURL: user.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif',
     role: finalRole // This will be overwritten by a fetch if they are STAFF, but usually login is followed by fetch anyway
   };
 }
@@ -432,7 +432,7 @@ export async function updateUserPresence(info: {
     await setDoc(presenceRef, {
       uid: info.uid,
       username: info.username || 'Aventureiro',
-      photoURL: info.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg',
+      photoURL: info.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif',
       role: info.role || 'JOGADOR',
       lastSeen: serverTimestamp(),
       isOnline: info.isOnline !== undefined ? info.isOnline : true,

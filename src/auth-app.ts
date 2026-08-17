@@ -320,9 +320,9 @@ export function getRoleBadgeHtml(role: string, isMe = false, paddingX = 'px-1.5'
  * Update UI across header, sidebar, account modal and options modal with logged in user data
  */
 function updateAppUIWithProfile(profile: UserProfileData | null, gUser: any | null) {
-  const username = profile?.username || 'Convidado';
-  const email = profile?.email || gUser?.email || 'convidado@cosmos.local';
-  const photo = profile?.photoURL || gUser?.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg';
+  const username = profile?.username || 'Aguardando para encarnar...';
+  const email = profile?.email || gUser?.email || 'No momento você é esse bostinha acima aguardando para começar a existir...';
+  const photo = profile?.photoURL || gUser?.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif';
   const role = profile?.role || (gUser ? 'JOGADOR' : 'CONVIDADO');
 
   // Window references
@@ -370,7 +370,7 @@ function updateAppUIWithProfile(profile: UserProfileData | null, gUser: any | nu
       authStatusBadge.innerHTML = `
         <span class="text-amber-400 flex items-center space-x-1.5 font-semibold">
           <span class="w-2 h-2 rounded-full bg-amber-400"></span>
-          <span>Modo Convidado (Não Conectado)</span>
+          <span>Crie sua conta Ordos.</span>
         </span>
       `;
     }
@@ -667,8 +667,8 @@ function getLocalSessionId(): string {
 
 function sendPresenceHeartbeat(isOnline = true) {
   const uid = currentGoogleUser?.uid || getLocalSessionId();
-  const username = currentUserProfile?.username || (currentGoogleUser ? currentGoogleUser.displayName : null) || 'Aventureiro Convidado';
-  const photoURL = currentUserProfile?.photoURL || currentGoogleUser?.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg';
+  const username = currentUserProfile?.username || (currentGoogleUser ? currentGoogleUser.displayName : null) || 'Aguardando para encarnar...';
+  const photoURL = currentUserProfile?.photoURL || currentGoogleUser?.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif';
   const role = currentUserProfile?.role || (currentGoogleUser ? 'JOGADOR' : 'CONVIDADO');
 
   updateUserPresence({
@@ -762,7 +762,7 @@ function renderOnlineMembers(users: PresenceData[]) {
     displayUsers.unshift({
       uid: currentUid,
       username: currentUserProfile?.username || (currentGoogleUser ? currentGoogleUser.displayName : null) || 'Você (Aventureiro)',
-      photoURL: currentUserProfile?.photoURL || currentGoogleUser?.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg',
+      photoURL: currentUserProfile?.photoURL || currentGoogleUser?.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif',
       role: currentUserProfile?.role || (currentGoogleUser ? 'JOGADOR' : 'CONVIDADO'),
       isOnline: true,
       statusText: 'No Menu Principal'
@@ -803,7 +803,7 @@ function renderOnlineMembers(users: PresenceData[]) {
 
   const usersHtml = displayUsers.map(user => {
     const isMe = user.uid === currentUid;
-    const photo = user.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg';
+    const photo = user.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif';
     let roleBadge = getRoleBadgeHtml(user.role || 'JOGADOR', isMe, 'px-1.5', 'py-0.2');
 
     return `
@@ -877,7 +877,7 @@ onAuthStateChanged(auth, async (user) => {
         displayName: user.displayName || 'Usuário Offline',
         username: user.displayName?.replace(/\s+/g, '_').toLowerCase() || 'offline_user',
         usernameLower: user.displayName?.replace(/\s+/g, '_').toLowerCase() || 'offline_user',
-        photoURL: user.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg',
+        photoURL: user.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif',
         role: 'JOGADOR',
         updatedAt: null
       }, user);
@@ -1367,7 +1367,7 @@ window.editCharacter = function(charId: string) {
     setValue('pf2e-photo-url', char.profilePictureUrl || '');
     const avatarEl = document.getElementById('pf2e-avatar-preview') as HTMLImageElement;
     if (avatarEl) {
-      avatarEl.src = char.profilePictureUrl || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg';
+      avatarEl.src = char.profilePictureUrl || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif';
     }
   }
 
@@ -1770,7 +1770,7 @@ window.resetCharacterForm = function() {
   clearValue('pf2e-import-json');
   clearValue('pf2e-photo-url');
   const pf2eAvatar = document.getElementById('pf2e-avatar-preview') as HTMLImageElement;
-  if (pf2eAvatar) pf2eAvatar.src = 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg';
+  if (pf2eAvatar) pf2eAvatar.src = 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif';
   const pf2eVisualSheet = document.getElementById('pf2e-visual-sheet');
   if (pf2eVisualSheet) pf2eVisualSheet.classList.add('hidden');
   clearValue('char-race');
@@ -1845,7 +1845,7 @@ window.resetCharacterForm = function() {
  */
 window.updateCharPhotoPreview = function(url?: string) {
   const previewImg = document.getElementById('char-photo-preview') as HTMLImageElement | null;
-  const defaultFallback = 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg';
+  const defaultFallback = 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif';
   if (!previewImg) return;
   const input = document.getElementById('char-photo-url') as HTMLInputElement | null;
   const targetUrl = url !== undefined ? url : (input?.value || '');
@@ -6484,7 +6484,7 @@ window.enterGameSession = async function(campaignId?: string) {
   // Update Game Avatar Image
   const avatarEl = document.getElementById('game-sheet-avatar') as HTMLImageElement | null;
   if (avatarEl) {
-    const defaultAvatar = 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg';
+    const defaultAvatar = 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif';
     avatarEl.src = char.profilePictureUrl && char.profilePictureUrl.trim() ? char.profilePictureUrl.trim() : defaultAvatar;
     avatarEl.onerror = () => {
       avatarEl.src = defaultAvatar;
@@ -7016,7 +7016,7 @@ function renderSheetTabCabecalho(char: any): string {
   // --- End Pathfinder 2e ---
 
   const creatorName = char.playerName || char.player || (window.currentUserProfile?.username || 'Aventureiro');
-  const defaultAvatar = 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg';
+  const defaultAvatar = 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif';
   const photoUrl = char.profilePictureUrl && char.profilePictureUrl.trim() ? char.profilePictureUrl.trim() : defaultAvatar;
 
   return `
@@ -9362,7 +9362,7 @@ function renderAdminUserList() {
     return `
       <button onclick="loadAdminUserDetails('${user.uid}')" class="w-full text-left bg-cosmic-950 hover:bg-purple-950/30 border border-purple-500/20 hover:border-purple-500/50 p-3 rounded-xl transition-all flex items-center space-x-3 group">
         <div class="relative shrink-0">
-          <img src="${user.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg'}" alt="Avatar" class="w-10 h-10 rounded-full object-cover border border-purple-500/30">
+          <img src="${user.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif'}" alt="Avatar" class="w-10 h-10 rounded-full object-cover border border-purple-500/30">
           <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full ${statusDot} border-2 border-cosmic-950"></span>
         </div>
         <div class="flex-1 min-w-0">
@@ -9411,7 +9411,7 @@ window.loadAdminUserDetails = async function(uid: string) {
       <div class="space-y-6 animate-fade-in">
         <!-- Header Profile -->
         <div class="flex items-start space-x-4">
-          <img src="${user.photoURL || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg'}" alt="Avatar" class="w-16 h-16 rounded-full object-cover border-2 border-purple-500/50 shadow-neon-purple">
+          <img src="${user.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif'}" alt="Avatar" class="w-16 h-16 rounded-full object-cover border-2 border-purple-500/50 shadow-neon-purple">
           <div class="flex-1">
             <h2 class="text-xl font-bold font-orbitron text-purple-100">${user.username || 'Sem Nome'}</h2>
             <p class="text-sm font-mono text-slate-400 mb-2">${user.email || 'Sem E-mail'}</p>
