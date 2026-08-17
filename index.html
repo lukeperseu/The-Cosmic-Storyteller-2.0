@@ -661,22 +661,22 @@
               <div class="flex items-center gap-1.5 overflow-x-auto pb-0.5 max-w-full scrollbar-none">
                 <span class="text-[11px] font-bold text-purple-300/80 font-rajdhani uppercase shrink-0">Modo:</span>
                 
-                <button type="button" onclick="window.setSessionActionMode('speech')" id="action-mode-speech" class="action-mode-btn active px-2.5 py-1 rounded text-xs font-rajdhani font-bold bg-purple-600 text-white transition-all flex items-center space-x-1 shrink-0">
+                <button type="button" data-mode="speech" onclick="window.setSessionActionMode('speech')" id="action-mode-speech" class="action-mode-btn px-2.5 py-1 rounded text-xs font-rajdhani font-bold bg-purple-950 text-slate-300 hover:text-white border border-purple-500/30 transition-all flex items-center space-x-1 shrink-0">
                   <span>🗣️</span>
                   <span>Falar</span>
                 </button>
 
-                <button type="button" onclick="window.setSessionActionMode('action')" id="action-mode-action" class="action-mode-btn px-2.5 py-1 rounded text-xs font-rajdhani font-bold bg-purple-950 text-slate-300 hover:text-white border border-purple-500/30 transition-all flex items-center space-x-1 shrink-0">
+                <button type="button" data-mode="action" onclick="window.setSessionActionMode('action')" id="action-mode-action" class="action-mode-btn px-2.5 py-1 rounded text-xs font-rajdhani font-bold bg-purple-950 text-slate-300 hover:text-white border border-purple-500/30 transition-all flex items-center space-x-1 shrink-0">
                   <span>⚔️</span>
                   <span>Agir</span>
                 </button>
 
-                <button type="button" onclick="window.setSessionActionMode('thought')" id="action-mode-thought" class="action-mode-btn px-2.5 py-1 rounded text-xs font-rajdhani font-bold bg-purple-950 text-slate-300 hover:text-white border border-purple-500/30 transition-all flex items-center space-x-1 shrink-0">
+                <button type="button" data-mode="thought" onclick="window.setSessionActionMode('thought')" id="action-mode-thought" class="action-mode-btn px-2.5 py-1 rounded text-xs font-rajdhani font-bold bg-purple-950 text-slate-300 hover:text-white border border-purple-500/30 transition-all flex items-center space-x-1 shrink-0">
                   <span>💭</span>
                   <span>Pensar</span>
                 </button>
 
-                <button type="button" onclick="window.setSessionActionMode('narrator')" id="action-mode-narrator" class="action-mode-btn px-2.5 py-1 rounded text-xs font-rajdhani font-bold bg-purple-950 text-slate-300 hover:text-white border border-purple-500/30 transition-all flex items-center space-x-1 shrink-0">
+                <button type="button" data-mode="narrator" onclick="window.setSessionActionMode('narrator')" id="action-mode-narrator" class="action-mode-btn px-2.5 py-1 rounded text-xs font-rajdhani font-bold bg-purple-950 text-slate-300 hover:text-white border border-purple-500/30 transition-all flex items-center space-x-1 shrink-0">
                   <span>📜</span>
                   <span>Narrar / IA</span>
                 </button>
@@ -688,29 +688,37 @@
             </div>
 
             <!-- Main Input Box & Submit Button -->
-            <form id="game-chat-form" onsubmit="window.handleSendSessionMessage(event)" class="flex items-end gap-2">
-              <div class="relative flex-1">
-                <textarea 
-                  id="game-chat-input"
-                  rows="2"
-                  placeholder="Descreva a ação do seu personagem, diálogo ou comando..."
-                  onkeydown="window.handleChatInputKeydown(event)"
-                  class="w-full bg-[#050714] border border-purple-500/40 focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 rounded-xl p-2.5 sm:p-3 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none resize-none font-rajdhani leading-relaxed shadow-inner"
-                ></textarea>
+            <form id="game-chat-form" onsubmit="window.handleSendSessionMessage(event)" class="flex flex-col gap-2">
+              <div class="flex items-end gap-2 w-full">
+                <div class="relative flex-1">
+                  <textarea 
+                    id="game-chat-input"
+                    rows="2"
+                    placeholder="Descreva a ação do seu personagem, diálogo ou comando..."
+                    onkeydown="window.handleChatInputKeydown(event)"
+                    class="w-full bg-[#050714] border border-purple-500/40 focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 rounded-xl p-2.5 sm:p-3 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none resize-none font-rajdhani leading-relaxed shadow-inner"
+                  ></textarea>
+                </div>
+                <button 
+                  type="button" 
+                  id="game-chat-narrator-btn"
+                  onclick="window.callNarratorAI()"
+                  class="bg-amber-900/60 hover:bg-amber-800/80 border border-amber-500/50 px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl text-amber-200 font-rajdhani font-bold text-sm flex items-center justify-center space-x-1.5 shrink-0 shadow-lg h-[46px] sm:h-[54px] transition-colors"
+                  title="Chamar IA Narradora"
+                >
+                  <i data-lucide="sparkles" class="w-4 h-4 sm:w-5 sm:h-5"></i>
+                </button>
+                <button 
+                  type="submit" 
+                  id="game-chat-send-btn"
+                  class="btn-purple-neon px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl text-white font-rajdhani font-bold text-sm flex items-center justify-center space-x-1.5 shrink-0 shadow-lg h-[46px] sm:h-[54px]"
+                >
+                  <i data-lucide="send" class="w-4 h-4 text-purple-200"></i>
+                  <span class="hidden sm:inline">Enviar</span>
+                </button>
               </div>
-
-              <button 
-                type="submit" 
-                id="game-chat-send-btn"
-                class="btn-purple-neon px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl text-white font-rajdhani font-bold text-sm flex items-center justify-center space-x-1.5 shrink-0 shadow-lg h-[46px] sm:h-[54px]"
-              >
-                <i data-lucide="send" class="w-4 h-4 text-purple-200"></i>
-                <span class="hidden sm:inline">Enviar</span>
-              </button>
             </form>
-
           </div>
-
         </section>
 
         <!-- BACKDROP PARA MOBILE (FECHAR MENU DIREITO AO CLICAR FORA) -->
@@ -1905,15 +1913,7 @@
                 class="w-full bg-cosmic-950/90 border border-purple-500/40 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 font-rajdhani font-bold"
               >
                 <option value="Tormenta20" selected>Tormenta20 (T20)</option>
-                <option value="D&D 5e">Dungeons & Dragons 5e</option>
-                <option value="D&D 5.5e (2024)">Dungeons & Dragons 5.5e (2024)</option>
-                <option value="Call of Cthulhu 7e">Call of Cthulhu 7ª Edição</option>
                 <option value="Pathfinder 2e">Pathfinder 2ª Edição</option>
-                <option value="Ordem Paranormal RPG">Ordem Paranormal RPG</option>
-                <option value="Cyberpunk RED">Cyberpunk RED</option>
-                <option value="Vampiro: A Máscara v5">Vampiro: A Máscara v5</option>
-                <option value="3D&T Alpha">3D&T Alpha</option>
-                <option value="Fate Core">Fate Core</option>
                 <option value="Outro / Personalizado">Outro / Sistema Personalizado</option>
               </select>
             </div>
@@ -2263,13 +2263,14 @@
           <div class="bg-gradient-to-r from-[#1a2333] to-[#0f131e] p-5 border-b border-emerald-500/20 flex flex-col md:flex-row gap-5 items-center">
             <div class="relative group">
               <div class="w-24 h-24 rounded-full border-2 border-emerald-500/50 overflow-hidden bg-[#0b0f19] flex items-center justify-center relative group">
-                <img id="pf2e-avatar-preview" src="https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg" class="w-full h-full object-cover">
+                <img id="pf2e-avatar-preview" src="https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg" class="w-full h-full object-cover" onerror="this.onerror=null; this.src='https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg'">
               </div>
             </div>
             <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
               <div class="md:col-span-2">
                 <label class="text-[10px] text-emerald-400/80 font-bold uppercase tracking-wider">URL da Foto de Perfil (Avatar)</label>
                 <input type="url" id="pf2e-photo-url" class="w-full bg-black/40 border border-slate-700 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-400 mt-1" placeholder="https://exemplo.com/minha-foto.jpg" oninput="document.getElementById('pf2e-avatar-preview').src = this.value || 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg'">
+                <p class="text-[9px] text-slate-500 mt-1">Dica: Use "Copiar Endereço da Imagem" (deve terminar em .jpg, .png, etc). Links curtos como pin.it não funcionam.</p>
               </div>
               <div>
                 <label class="text-[10px] text-emerald-400/80 font-bold uppercase tracking-wider">Nome do Personagem</label>
@@ -2521,7 +2522,7 @@
             <!-- Foto de Perfil do Personagem -->
             <div class="bg-[#0b0f19] border border-purple-500/30 p-3 rounded-xl flex flex-col sm:flex-row sm:items-center gap-3">
               <div class="relative shrink-0 flex items-center justify-center">
-                <img id="char-photo-preview" src="https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg" alt="Preview da Foto" class="w-14 h-14 rounded-full object-cover border-2 border-purple-500/60 shadow-md bg-purple-950/50" onerror="this.src='https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg'">
+                <img id="char-photo-preview" src="https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg" alt="Preview da Foto" class="w-14 h-14 rounded-full object-cover border-2 border-purple-500/60 shadow-md bg-purple-950/50" onerror="this.onerror=null; this.src='https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg'">
               </div>
               <div class="flex-1 min-w-0 space-y-1">
                 <label for="char-photo-url" class="text-[11px] font-bold text-purple-300 uppercase tracking-wider block">
@@ -2533,6 +2534,7 @@
                     Visualizar
                   </button>
                 </div>
+                <p class="text-[9px] text-slate-500 mt-1 leading-tight">Dica: Use "Copiar Endereço da Imagem" (deve terminar em .jpg, .png, etc). Links curtos como pin.it não funcionam porque são páginas web.</p>
                 <span class="text-[10px] text-slate-400 block">Esta foto ilustrará o cabeçalho da ficha e o avatar na Tela de Jogo.</span>
               </div>
             </div>
@@ -3832,6 +3834,31 @@
   </div>
 
 
+  <!-- CONFIRM MODAL -->
+  <div id="confirm-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-[70] flex items-center justify-center p-4 hidden">
+    <div class="glass-card w-full max-w-sm rounded-2xl p-6 relative border border-red-500/40 bg-[#0b0f19]">
+      <div class="flex items-center justify-between pb-3 mb-3 border-b border-red-500/20">
+        <h3 id="confirm-modal-title" class="font-orbitron font-bold text-lg text-red-400">
+          Confirmar Ação
+        </h3>
+        <button onclick="closeModal('confirm-modal')" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div id="confirm-modal-message" class="text-sm text-slate-300 py-2">
+        Tem certeza que deseja continuar?
+      </div>
+      <div class="mt-5 pt-3 border-t border-red-500/20 flex gap-3 justify-end">
+        <button onclick="closeModal('confirm-modal')" class="px-4 py-2 rounded-lg text-sm font-bold text-slate-300 hover:bg-slate-800 transition-colors">
+          Cancelar
+        </button>
+        <button id="confirm-modal-btn" class="bg-red-600 hover:bg-red-500 px-4 py-2 rounded-lg text-sm font-bold text-white transition-colors shadow-lg shadow-red-500/20">
+          Confirmar
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== JAVASCRIPT CORE ENGINE ==================== -->
   <script type="module" src="/src/auth-app.ts"></script>
   <script>
@@ -4061,31 +4088,7 @@
               <span class="text-emerald-400">✓</span> <span>Tormenta20 (T20)</span>
             </div>
             <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
-              <span class="text-emerald-400">✓</span> <span>Dungeons & Dragons 5e</span>
-            </div>
-            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
-              <span class="text-emerald-400">✓</span> <span>Dungeons & Dragons 5.5e (2024)</span>
-            </div>
-            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
-              <span class="text-emerald-400">✓</span> <span>Call of Cthulhu 7ª Edição</span>
-            </div>
-            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
               <span class="text-emerald-400">✓</span> <span>Pathfinder 2ª Edição</span>
-            </div>
-            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
-              <span class="text-emerald-400">✓</span> <span>Ordem Paranormal RPG</span>
-            </div>
-            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
-              <span class="text-emerald-400">✓</span> <span>Cyberpunk RED</span>
-            </div>
-            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
-              <span class="text-emerald-400">✓</span> <span>Vampiro: A Máscara v5</span>
-            </div>
-            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
-              <span class="text-emerald-400">✓</span> <span>3D&T Alpha</span>
-            </div>
-            <div class="bg-cosmic-950 p-2.5 rounded-lg border border-purple-500/30 text-purple-200 flex items-center space-x-2">
-              <span class="text-emerald-400">✓</span> <span>Fate Core</span>
             </div>
             <div class="bg-cosmic-950 p-2.5 rounded-lg border border-slate-500/30 text-slate-300 flex items-center space-x-2 sm:col-span-2">
               <span class="text-slate-400">⚡</span> <span>Outro / Sistema Personalizado</span>

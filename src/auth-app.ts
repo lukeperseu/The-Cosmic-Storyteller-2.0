@@ -217,9 +217,10 @@ declare global {
     updateCharPhotoPreview: (url?: string) => void;
     testCharPhotoUrl: () => void;
     handleCharSystemChange: () => void;
-    processPathbuilderJson: () => void;
+    processPathbuilderJson: () => Promise<void>;
     resetPf2eActions: () => void;
     switchPf2eTab: (tabId: string) => void;
+    callNarratorAI: () => Promise<void>;
   }
 }
 
@@ -1270,27 +1271,40 @@ window.editCharacter = function(charId: string) {
  * Delete a character by ID
  */
 window.deleteCharacter = async function(charId: string) {
-  if (!confirm("Tem certeza que deseja excluir esta ficha permanentemente? Esta ação não pode ser desfeita.")) {
-    return;
-  }
+  const modal = document.getElementById('confirm-modal');
+  const msg = document.getElementById('confirm-modal-message');
+  const btn = document.getElementById('confirm-modal-btn');
   
-  try {
-    await deleteCharacterDoc(charId);
-    if (window.showToast) window.showToast('Personagem excluído com sucesso!', 'success');
+  if (modal && msg && btn) {
+    msg.innerText = "Tem certeza que deseja excluir esta ficha permanentemente? Esta ação não pode ser desfeita.";
     
-    // Refresh the list
-    if (currentGoogleUser) {
-      window.loadedCharacters = await getUserCharacters(currentGoogleUser.uid);
-      window.renderCharacterList();
-    }
+    // Replace button to remove old event listeners
+    const newBtn = btn.cloneNode(true) as HTMLButtonElement;
+    btn.parentNode?.replaceChild(newBtn, btn);
     
-    // If the deleted character was currently being edited, reset the form
-    if (window.editingCharacterId === charId) {
-      window.resetCharacterForm();
-    }
-  } catch (err) {
-    console.error("Error deleting character UI:", err);
-    if (window.showToast) window.showToast('Erro ao excluir personagem.', 'error');
+    newBtn.onclick = async () => {
+      window.closeModal('confirm-modal');
+      try {
+        await deleteCharacterDoc(charId);
+        if (window.showToast) window.showToast('Personagem excluído com sucesso!', 'success');
+        
+        // Refresh the list
+        if (currentGoogleUser) {
+          window.loadedCharacters = await getUserCharacters(currentGoogleUser.uid);
+          window.openPersonagensModal();
+        }
+        
+        // If the deleted character was currently being edited, reset the form
+        if (window.editingCharacterId === charId) {
+          window.resetCharacterForm();
+        }
+      } catch (err) {
+        console.error("Error deleting character UI:", err);
+        if (window.showToast) window.showToast('Erro ao excluir personagem.', 'error');
+      }
+    };
+    
+    window.openModal('confirm-modal');
   }
 };
 
@@ -1341,15 +1355,36 @@ window.switchPf2eTab = function(tabId: string) {
   });
 };
 
-window.processPathbuilderJson = function() {
+window.processPathbuilderJson = async function() {
   const jsonEl = document.getElementById('pf2e-import-json') as HTMLTextAreaElement;
   const visualSheet = document.getElementById('pf2e-visual-sheet');
   if (!jsonEl || !visualSheet) return;
 
-  const jsonStr = jsonEl.value.trim();
+  let jsonStr = jsonEl.value.trim();
   if (!jsonStr) {
     visualSheet.classList.add('hidden');
     return;
+  }
+  
+  // Check if it's a 6-digit ID
+  if (/^\d{6}$/.test(jsonStr)) {
+    if (window.showToast) window.showToast('Buscando personagem no Pathbuilder...', 'info');
+    try {
+      // Use our server proxy to avoid CORS issues
+      const response = await fetch(`/api/pathbuilder?id=${jsonStr}`);
+      if (!response.ok) {
+        throw new Error('Falha ao buscar ID do Pathbuilder. Verifique se o ID está correto e se o personagem foi exportado.');
+      }
+      const data = await response.json();
+      jsonStr = JSON.stringify(data);
+      // Update the textarea with the fetched JSON so it can be saved to DB
+      jsonEl.value = jsonStr; 
+    } catch (error: any) {
+      console.warn("Pathbuilder API Error:", error);
+      visualSheet.classList.add('hidden');
+      if (window.showToast) window.showToast(error.message || 'Erro ao comunicar com o servidor do Pathbuilder.', 'error');
+      return;
+    }
   }
 
   try {
@@ -6024,7 +6059,7 @@ let activeGameCampaign: CampaignData | null = null;
 let activeGameCharacter: any = null;
 let activeSessionMessagesUnsub: (() => void) | null = null;
 let currentGameSheetTab: string = 'cabecalho';
-let currentActionMode: 'speech' | 'action' | 'thought' | 'narrator' = 'speech';
+let currentActionMode: 'speech' | 'action' | 'thought' | 'narrator' | 'chat' = 'chat';
 let selectedDiceModalDie: string = 'd20';
 let sessionNotesAutoSaveTimer: any = null;
 
@@ -6218,6 +6253,8 @@ window.enterGameSession = async function(campaignId?: string) {
   const sheetClassEl = document.getElementById('game-sheet-char-class');
 
   let classesText = 'Aventureiro 1';
+  let raceText = char.race || 'Humano';
+  
   if (char.classes && Array.isArray(char.classes) && char.classes.length > 0) {
     const valid = char.classes.filter((c: any) => c.name && c.name.trim());
     if (valid.length > 0) {
@@ -6226,12 +6263,22 @@ window.enterGameSession = async function(campaignId?: string) {
   } else if (char.class1) {
     classesText = char.class2 ? `${char.class1} ${char.class1Level || 1} / ${char.class2} ${char.class2Level || 1}` : `${char.class1} ${char.totalLevel || 1}`;
   }
+  
+  if (char.system === 'Pathfinder 2e') {
+    try {
+      const pb = JSON.parse(char.pathbuilderJson || '{}').build;
+      if (pb) {
+        raceText = (pb.ancestry || 'Humano') + (pb.heritage ? ` ${pb.heritage}` : '');
+        classesText = `${pb.class || 'Aventureiro'} ${pb.level || 1}`;
+      }
+    } catch(e) {}
+  }
 
   if (titleEl) titleEl.innerText = campaign.name || 'Sessão Ativa';
   if (sysEl) sysEl.innerText = `${campaign.system || 'Tormenta20'} ${campaign.systemVersion ? `(${campaign.systemVersion})` : ''}`;
   if (charBadge) charBadge.innerText = char.name || 'Personagem';
   if (sheetNameEl) sheetNameEl.innerText = char.name || 'Sem Nome';
-  if (sheetClassEl) sheetClassEl.innerText = `${char.race || 'Humano'} • ${classesText}`;
+  if (sheetClassEl) sheetClassEl.innerText = `${raceText} • ${classesText}`;
 
   // Update Game Avatar Image
   const avatarEl = document.getElementById('game-sheet-avatar') as HTMLImageElement | null;
@@ -6443,6 +6490,36 @@ function getFormattedAttackList(char: any): Array<{
   range: string;
 }> {
   if (!char) return [];
+
+  // --- Pathfinder 2e Integration ---
+  if (char.system === 'Pathfinder 2e') {
+    try {
+      const pb = JSON.parse(char.pathbuilderJson || '{}').build;
+      if (pb && pb.weapons) {
+        return pb.weapons.map((w: any, idx: number) => {
+          let dmg = `${w.str || '1'}${w.die} ${w.damageType || ''}`.trim();
+          if (w.damageBonus) dmg += `+${w.damageBonus}`;
+          if (w.extraDamage && w.extraDamage.length > 0) dmg += ` (+ ${w.extraDamage.join(', ')})`;
+          return {
+            id: `pf2e-wpn-${idx}`,
+            name: w.display || w.name || 'Ataque',
+            weapon: w.display || w.name || 'Arma',
+            atkBonus: 0, // Simplified for string rendering
+            atkBonusStr: w.prof || '+0',
+            damage: dmg,
+            crit: '20',
+            damageType: w.damageType || '',
+            range: '-'
+          };
+        });
+      }
+    } catch (e) {
+      console.warn('Error parsing PF2E weapons', e);
+    }
+    return [];
+  }
+  // --- End Pathfinder 2e ---
+
   const list: any[] = [];
   const rawAttacks = Array.isArray(char.attacks) ? char.attacks : [];
   const rawInventory = Array.isArray(char.inventory) ? char.inventory : [];
@@ -6696,6 +6773,9 @@ function getCharacterDefense(char: any): { total: number; breakdown: string; arm
  */
 function renderSheetTabCabecalho(char: any): string {
   let classesText = 'Aventureiro 1';
+  let raceText = char.race || 'Humano';
+  let levelNum = char.totalLevel || 1;
+  
   if (char.classes && Array.isArray(char.classes) && char.classes.length > 0) {
     const valid = char.classes.filter((c: any) => c.name && c.name.trim());
     if (valid.length > 0) {
@@ -6704,6 +6784,19 @@ function renderSheetTabCabecalho(char: any): string {
   } else if (char.class1) {
     classesText = char.class2 ? `${char.class1} ${char.class1Level || 1} / ${char.class2} ${char.class2Level || 1}` : `${char.class1} ${char.totalLevel || 1}`;
   }
+
+  // --- Pathfinder 2e Integration ---
+  if (char.system === 'Pathfinder 2e') {
+    try {
+      const pb = JSON.parse(char.pathbuilderJson || '{}').build;
+      if (pb) {
+        raceText = (pb.ancestry || 'Humano') + (pb.heritage ? ` ${pb.heritage}` : '');
+        classesText = `${pb.class || 'Aventureiro'} ${pb.level || 1}`;
+        levelNum = pb.level || 1;
+      }
+    } catch (e) {}
+  }
+  // --- End Pathfinder 2e ---
 
   const creatorName = char.playerName || char.player || (window.currentUserProfile?.username || 'Aventureiro');
   const defaultAvatar = 'https://i.pinimg.com/736x/99/ea/30/99ea30f8ce9ea2ca99606755a8d56ef4.jpg';
@@ -6714,18 +6807,18 @@ function renderSheetTabCabecalho(char: any): string {
       <!-- Main Bio Banner with Avatar -->
       <div class="p-3.5 rounded-xl bg-gradient-to-br from-indigo-950/80 via-[#0e1222] to-purple-950/80 border border-indigo-500/30 shadow-md">
         <div class="flex items-center space-x-3.5">
-          <img src="${escapeHtml(photoUrl)}" alt="${escapeHtml(char.name || 'Herói')}" class="w-14 h-14 rounded-full object-cover border-2 border-purple-400/60 shadow-md bg-purple-950/60 shrink-0" onerror="this.src='${defaultAvatar}'">
+          <img src="${escapeHtml(photoUrl)}" alt="${escapeHtml(char.name || 'Herói')}" class="w-14 h-14 rounded-full object-cover border-2 border-purple-400/60 shadow-md bg-purple-950/60 shrink-0" onerror="this.onerror=null; this.src='${defaultAvatar}'">
           <div class="flex-1 min-w-0">
             <div class="flex items-start justify-between">
               <div class="min-w-0">
                 <h4 class="font-orbitron font-bold text-base text-white tracking-wide truncate">${escapeHtml(char.name || 'Sem Nome')}</h4>
                 <p class="text-indigo-300 font-semibold text-xs mt-0.5 truncate">
-                  <span>${escapeHtml(char.race || 'Humano')}</span> &bull; 
+                  <span>${escapeHtml(raceText)}</span> &bull; 
                   <span class="text-amber-300 font-bold">${escapeHtml(classesText)}</span>
                 </p>
               </div>
               <span class="bg-indigo-950 text-indigo-300 border border-indigo-400/50 font-orbitron font-bold text-xs px-2.5 py-1 rounded-lg shrink-0 ml-2">
-                Nível ${char.totalLevel || 1}
+                Nível ${levelNum}
               </span>
             </div>
           </div>
@@ -6767,6 +6860,56 @@ function renderSheetTabCabecalho(char: any): string {
  * Renders Read-Only Atributos with clickable test buttons
  */
 function renderSheetTabAtributos(char: any): string {
+  // --- Pathfinder 2e Integration ---
+  if (char.system === 'Pathfinder 2e') {
+    let html = '<div class="space-y-3">';
+    try {
+      const pb = JSON.parse(char.pathbuilderJson || '{}').build;
+      if (pb && pb.abilities) {
+        const getMod = (score: number) => Math.floor((score - 10) / 2);
+        const formatMod = (m: number) => m >= 0 ? `+${m}` : `${m}`;
+        const attrs = [
+          { name: 'Força', id: 'FOR', mod: getMod(pb.abilities.str) },
+          { name: 'Destreza', id: 'DES', mod: getMod(pb.abilities.dex) },
+          { name: 'Constituição', id: 'CON', mod: getMod(pb.abilities.con) },
+          { name: 'Inteligência', id: 'INT', mod: getMod(pb.abilities.int) },
+          { name: 'Sabedoria', id: 'SAB', mod: getMod(pb.abilities.wis) },
+          { name: 'Carisma', id: 'CAR', mod: getMod(pb.abilities.cha) }
+        ];
+
+        html += `
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="font-orbitron font-bold text-xs text-white uppercase tracking-wider">ATRIBUTOS & MODIFICADORES (PF2e)</h4>
+          </div>
+        `;
+        
+        attrs.forEach(a => {
+          html += `
+            <div class="bg-[#0b0f22] border border-purple-500/20 rounded-xl p-3 flex items-center justify-between group hover:border-purple-500/50 transition-colors">
+              <div class="flex items-center space-x-4">
+                <div class="w-10 h-10 rounded-lg bg-purple-900/40 border border-purple-500/30 flex items-center justify-center font-orbitron font-bold text-purple-300">
+                  ${a.id}
+                </div>
+                <div>
+                  <div class="font-bold text-white text-sm">${a.name}</div>
+                  <div class="text-[11px] text-slate-400 font-rajdhani">Modificador: <span class="text-purple-300 font-bold">${formatMod(a.mod)}</span></div>
+                </div>
+              </div>
+              <button onclick="window.quickRollDice('1d20${formatMod(a.mod)}', 'Teste de ${a.name}')" class="px-3 py-1.5 rounded-lg bg-purple-900/30 text-purple-200 text-xs font-bold border border-purple-500/30 hover:bg-purple-600 hover:text-white transition-colors flex items-center space-x-1">
+                <span>🎲</span> <span>1d20${formatMod(a.mod)}</span>
+              </button>
+            </div>
+          `;
+        });
+      }
+    } catch (e) {
+      html += '<p class="text-xs text-slate-400">Erro ao processar atributos do Pathbuilder.</p>';
+    }
+    html += '</div>';
+    return html;
+  }
+  // --- End Pathfinder 2e ---
+
   const defaultAttrs = [
     { id: 'FOR', name: 'Força', value: 0, mod: 0 },
     { id: 'DES', name: 'Destreza', value: 0, mod: 0 },
@@ -6865,6 +7008,66 @@ const T20_STANDARD_PERICIAS = [
 ];
 
 function renderSheetTabPericias(char: any): string {
+  // --- Pathfinder 2e Integration ---
+  if (char.system === 'Pathfinder 2e') {
+    let html = '<div class="space-y-4 font-rajdhani text-xs select-text">';
+    try {
+      const pb = JSON.parse(char.pathbuilderJson || '{}').build;
+      if (pb && pb.proficiencies) {
+        const getProfLetter = (profNum: number) => {
+          if(profNum === 2) return 'T';
+          if(profNum === 4) return 'E';
+          if(profNum === 6) return 'M';
+          if(profNum === 8) return 'L';
+          return 'D';
+        };
+        const getMod = (score: number) => Math.floor(((score || 10) - 10) / 2);
+        const lvl = pb.level || 1;
+
+        // Base skills mapping (Pathbuilder uses lowercase keys for skills)
+        const skillMap: any = {
+          'acrobatics': { name: 'Acrobacia', stat: 'dex' },
+          'arcana': { name: 'Arcanismo', stat: 'int' },
+          'athletics': { name: 'Atletismo', stat: 'str' },
+          'crafting': { name: 'Manufatura', stat: 'int' },
+          'deception': { name: 'Enganação', stat: 'cha' },
+          'diplomacy': { name: 'Diplomacia', stat: 'cha' },
+          'intimidation': { name: 'Intimidação', stat: 'cha' },
+          'medicine': { name: 'Medicina', stat: 'wis' },
+          'nature': { name: 'Natureza', stat: 'wis' },
+          'occultism': { name: 'Ocultismo', stat: 'int' },
+          'performance': { name: 'Performance', stat: 'cha' },
+          'religion': { name: 'Religião', stat: 'wis' },
+          'society': { name: 'Sociedade', stat: 'int' },
+          'stealth': { name: 'Furtividade', stat: 'dex' },
+          'survival': { name: 'Sobrevivência', stat: 'wis' },
+          'thievery': { name: 'Roubo', stat: 'dex' }
+        };
+
+        html += '<div class="grid grid-cols-1 gap-1.5 overflow-y-auto max-h-[480px] pr-1">';
+        for (const [key, data] of Object.entries(skillMap)) {
+          const prof = pb.proficiencies[key] || 0;
+          const statScore = pb.abilities ? pb.abilities[(data as any).stat] : 10;
+          const total = (prof > 0 ? prof + lvl : 0) + getMod(statScore);
+          
+          html += `
+            <div class="bg-[#0b0e1a] p-2 rounded-lg border border-indigo-500/15 flex items-center justify-between hover:border-indigo-500/40 transition-colors">
+              <div class="flex items-center space-x-2">
+                <span class="font-bold text-white text-xs">${(data as any).name}</span>
+                <span class="text-[9px] px-1 bg-slate-800 text-slate-400 rounded">${getProfLetter(prof)}</span>
+              </div>
+              <button onclick="window.quickRollDice('1d20+${total}', 'Teste de ${(data as any).name}')" class="font-mono text-indigo-300 hover:text-white bg-indigo-900/30 px-2 py-0.5 rounded border border-indigo-500/30 text-xs">+${total}</button>
+            </div>
+          `;
+        }
+        html += '</div>';
+      }
+    } catch (e) {}
+    html += '</div>';
+    return html;
+  }
+  // --- End Pathfinder 2e ---
+
   const halfLevel = Math.floor((char.totalLevel || 1) / 2);
   const attrs = Array.isArray(char.attributes) ? char.attributes : [];
   
@@ -6962,6 +7165,105 @@ function renderSheetTabPericias(char: any): string {
  * Renders Read-Only Defesas & Recursos
  */
 function renderSheetTabDefesas(char: any): string {
+  // --- Pathfinder 2e Integration ---
+  if (char.system === 'Pathfinder 2e') {
+    let html = '<div class="space-y-4 font-rajdhani text-xs select-text">';
+    try {
+      const pb = JSON.parse(char.pathbuilderJson || '{}').build;
+      if (pb) {
+        const hpTotal = (pb.attributes?.ancestryhp || 8) + ((pb.attributes?.classhp || 8) * (pb.level || 1));
+        const maxHp = pb.hpTotal !== undefined ? pb.hpTotal : hpTotal;
+        const curHp = char.pvAtual !== undefined ? char.pvAtual : maxHp;
+        
+        const focusPoints = pb.focusPoints || 0;
+        const curFocus = char.pmAtual !== undefined ? char.pmAtual : focusPoints;
+        
+        const ac = pb.acTotal?.acTotal || 10;
+        
+        const getProfLetter = (profNum: number) => {
+          if(profNum === 2) return 'T';
+          if(profNum === 4) return 'E';
+          if(profNum === 6) return 'M';
+          if(profNum === 8) return 'L';
+          return 'D';
+        };
+
+        const fort = pb.proficiencies?.fortitude || 0;
+        const ref = pb.proficiencies?.reflex || 0;
+        const will = pb.proficiencies?.will || 0;
+        
+        const getMod = (score: number) => Math.floor(((score || 10) - 10) / 2);
+        const lvl = pb.level || 1;
+        
+        const fortTotal = (fort > 0 ? fort + lvl : 0) + getMod(pb.abilities?.con);
+        const refTotal = (ref > 0 ? ref + lvl : 0) + getMod(pb.abilities?.dex);
+        const willTotal = (will > 0 ? will + lvl : 0) + getMod(pb.abilities?.wis);
+
+        html += `
+          <!-- HP & Focus -->
+          <div class="grid grid-cols-2 gap-3">
+            <div class="bg-[#0b0f22] p-3 rounded-xl border border-emerald-500/30">
+              <div class="flex items-center space-x-1.5 mb-1.5 text-emerald-400 font-bold">
+                <span>❤️</span> <span>Pontos de Vida</span>
+              </div>
+              <div class="font-mono text-xl text-white">${curHp} <span class="text-xs text-slate-500">/ ${maxHp}</span></div>
+            </div>
+            <div class="bg-[#0b0f22] p-3 rounded-xl border border-cyan-500/30">
+              <div class="flex items-center space-x-1.5 mb-1.5 text-cyan-400 font-bold">
+                <span>✨</span> <span>Focus Points</span>
+              </div>
+              <div class="font-mono text-xl text-white">${curFocus} <span class="text-xs text-slate-500">/ ${focusPoints}</span></div>
+            </div>
+          </div>
+
+          <!-- AC -->
+          <div class="bg-[#0b0f22] p-3 rounded-xl border border-blue-500/30 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <div class="w-8 h-8 bg-blue-900/40 rounded flex items-center justify-center border border-blue-500/30">
+                🛡️
+              </div>
+              <span class="font-bold text-white uppercase tracking-wide">Classe de Armadura (CA)</span>
+            </div>
+            <span class="font-orbitron text-xl font-bold text-blue-300">${ac}</span>
+          </div>
+
+          <!-- Saves -->
+          <div class="bg-[#0b0f22] rounded-xl border border-indigo-500/30 overflow-hidden">
+            <div class="bg-indigo-950/40 p-2 border-b border-indigo-500/30">
+              <span class="font-bold text-white uppercase tracking-wide text-[11px]">Testes de Resistência</span>
+            </div>
+            <div class="p-2 space-y-1">
+              <div class="flex items-center justify-between p-2 rounded hover:bg-white/5">
+                <div class="flex items-center space-x-2">
+                  <span class="text-white font-bold">Fortitude</span>
+                  <span class="text-[9px] px-1 bg-slate-800 text-slate-400 rounded">${getProfLetter(fort)}</span>
+                </div>
+                <button onclick="window.quickRollDice('1d20+${fortTotal}', 'Fortitude')" class="font-mono text-indigo-300 hover:text-white bg-indigo-900/30 px-2 py-0.5 rounded border border-indigo-500/30">+${fortTotal}</button>
+              </div>
+              <div class="flex items-center justify-between p-2 rounded hover:bg-white/5">
+                <div class="flex items-center space-x-2">
+                  <span class="text-white font-bold">Reflexos</span>
+                  <span class="text-[9px] px-1 bg-slate-800 text-slate-400 rounded">${getProfLetter(ref)}</span>
+                </div>
+                <button onclick="window.quickRollDice('1d20+${refTotal}', 'Reflexos')" class="font-mono text-indigo-300 hover:text-white bg-indigo-900/30 px-2 py-0.5 rounded border border-indigo-500/30">+${refTotal}</button>
+              </div>
+              <div class="flex items-center justify-between p-2 rounded hover:bg-white/5">
+                <div class="flex items-center space-x-2">
+                  <span class="text-white font-bold">Vontade</span>
+                  <span class="text-[9px] px-1 bg-slate-800 text-slate-400 rounded">${getProfLetter(will)}</span>
+                </div>
+                <button onclick="window.quickRollDice('1d20+${willTotal}', 'Vontade')" class="font-mono text-indigo-300 hover:text-white bg-indigo-900/30 px-2 py-0.5 rounded border border-indigo-500/30">+${willTotal}</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    } catch (e) {}
+    html += '</div>';
+    return html;
+  }
+  // --- End Pathfinder 2e ---
+
   const pvAtual = char.pvAtual !== undefined ? char.pvAtual : 24;
   const pvMax = char.pvMax !== undefined ? char.pvMax : 24;
   const pmAtual = char.pmAtual !== undefined ? char.pmAtual : 8;
@@ -7080,6 +7382,46 @@ function renderSheetTabAtaques(char: any): string {
  * Renders Read-Only Habilidades, Poderes & Magias (reads char.customSections dynamically)
  */
 function renderSheetTabHabilidades(char: any): string {
+  // --- Pathfinder 2e Integration ---
+  if (char.system === 'Pathfinder 2e') {
+    let html = '<div class="space-y-4 font-rajdhani text-xs select-text">';
+    try {
+      const pb = JSON.parse(char.pathbuilderJson || '{}').build;
+      if (pb && pb.feats) {
+        html += '<h4 class="font-orbitron font-bold text-white text-xs mb-2">TALENTOS & HABILIDADES (FEATS)</h4>';
+        html += '<div class="space-y-2">';
+        pb.feats.forEach((featArr: any) => {
+          if (featArr && featArr[0] && featArr[0] !== 'undefined') {
+            html += `
+              <div class="bg-[#0b0e1a] p-2.5 rounded-lg border border-purple-500/20 hover:border-purple-500/40">
+                <span class="text-purple-300 font-bold">${featArr[0]}</span>
+              </div>
+            `;
+          }
+        });
+        html += '</div>';
+        
+        if (pb.specials && pb.specials.length > 0) {
+          html += '<h4 class="font-orbitron font-bold text-white text-xs mb-2 mt-4">ESPECIAIS</h4>';
+          html += '<div class="space-y-2">';
+          pb.specials.forEach((sp: string) => {
+            if (sp && sp !== 'undefined') {
+              html += `
+                <div class="bg-[#0b0e1a] p-2.5 rounded-lg border border-indigo-500/20">
+                  <span class="text-indigo-300 font-bold">${sp}</span>
+                </div>
+              `;
+            }
+          });
+          html += '</div>';
+        }
+      }
+    } catch (e) {}
+    html += '</div>';
+    return html;
+  }
+  // --- End Pathfinder 2e ---
+
   const sections = Array.isArray(char.customSections) ? char.customSections : [];
 
   if (sections.length === 0) {
@@ -7129,6 +7471,51 @@ function renderSheetTabHabilidades(char: any): string {
  * Renders Read-Only Inventário
  */
 function renderSheetTabInventario(char: any): string {
+  // --- Pathfinder 2e Integration ---
+  if (char.system === 'Pathfinder 2e') {
+    let html = '<div class="space-y-3 font-rajdhani text-xs select-text">';
+    try {
+      const pb = JSON.parse(char.pathbuilderJson || '{}').build;
+      if (pb) {
+        const money = pb.money || { cp: 0, sp: 0, gp: 0, pp: 0 };
+        const equipment = pb.equipment || [];
+        
+        html += `
+          <!-- Currency -->
+          <div class="bg-amber-950/30 p-2 rounded-lg border border-amber-500/30 flex justify-between items-center mb-4">
+            <span class="text-amber-300 font-bold uppercase tracking-wider text-[11px]">Riqueza Total</span>
+            <div class="flex items-center space-x-3 font-mono text-xs">
+              <span class="text-yellow-500 font-bold">${money.gp || 0} gp</span>
+              <span class="text-slate-300 font-bold">${money.sp || 0} sp</span>
+              <span class="text-amber-600 font-bold">${money.cp || 0} cp</span>
+            </div>
+          </div>
+          
+          <div class="font-orbitron font-bold text-white text-xs mb-2">Itens de Inventário</div>
+          <div class="space-y-1.5">
+        `;
+        
+        if (equipment.length > 0) {
+          equipment.forEach((item: any) => {
+            const qty = item[1] || 1;
+            const name = item[0] || 'Item Desconhecido';
+            html += `
+              <div class="bg-[#0b0e1a] p-2 rounded-lg border border-slate-700 flex justify-between items-center">
+                <span class="text-white">${name}</span>
+                <span class="text-slate-400 font-mono text-[10px]">x${qty}</span>
+              </div>
+            `;
+          });
+        } else {
+          html += '<p class="text-slate-500">Nenhum item listado.</p>';
+        }
+      }
+    } catch (e) {}
+    html += '</div>';
+    return html;
+  }
+  // --- End Pathfinder 2e ---
+
   const inv = Array.isArray(char.inventory) ? char.inventory : [];
   const money = char.money !== undefined ? char.money : (char.tibares !== undefined ? char.tibares : 0);
   const currencyName = char.currencyName || 'T$ (Tibares)';
@@ -7342,13 +7729,14 @@ window.toggleSessionMoreToolsMenu = function(forceState?: boolean) {
  */
 window.updateGameHUD = function() {
   const char = activeGameCharacter || {};
-  const pvAtual = char.pvAtual !== undefined ? char.pvAtual : 24;
-  const pvMax = char.pvMax !== undefined ? char.pvMax : 24;
-  const pmAtual = char.pmAtual !== undefined ? char.pmAtual : 8;
-  const pmMax = char.pmMax !== undefined ? char.pmMax : 8;
   
-  const defData = getCharacterDefense(char);
-
+  let pvAtual = char.pvAtual !== undefined ? char.pvAtual : 24;
+  let pvMax = char.pvMax !== undefined ? char.pvMax : 24;
+  let pmAtual = char.pmAtual !== undefined ? char.pmAtual : 8;
+  let pmMax = char.pmMax !== undefined ? char.pmMax : 8;
+  let defTotal = getCharacterDefense(char).total;
+  let raceText = char.race || 'Humano';
+  
   // Classes text
   let classesText = 'Aventureiro 1';
   if (char.classes && Array.isArray(char.classes) && char.classes.length > 0) {
@@ -7360,14 +7748,37 @@ window.updateGameHUD = function() {
     classesText = char.class2 ? `${char.class1} / ${char.class2}` : `${char.class1} ${char.totalLevel || 1}`;
   }
 
+  // --- Pathfinder 2e Integration ---
+  if (char.system === 'Pathfinder 2e') {
+    try {
+      const pb = JSON.parse(char.pathbuilderJson || '{}').build;
+      if (pb) {
+        pvMax = (pb.attributes?.ancestryhp || 8) + ((pb.attributes?.classhp || 8) * (pb.level || 1));
+        if (pb.hpTotal !== undefined) pvMax = pb.hpTotal;
+        pvAtual = char.pvAtual !== undefined ? char.pvAtual : pvMax; // fallback to max if not set yet
+        
+        // Pathfinder Focus Points / Spell Slots could map to PM, but let's keep PM hidden or map to Focus if needed. For now, 0 or generic:
+        pmMax = pb.focusPoints || 0;
+        pmAtual = char.pmAtual !== undefined ? char.pmAtual : pmMax;
+        
+        defTotal = pb.acTotal?.acTotal || 10;
+        raceText = (pb.ancestry || 'Humano') + (pb.heritage ? ` ${pb.heritage}` : '');
+        classesText = `${pb.class || 'Aventureiro'} ${pb.level || 1}`;
+      }
+    } catch (e) {
+      console.warn('Error parsing PF2E HUD data', e);
+    }
+  }
+  // --- End Pathfinder 2e ---
+
   // Header Details
   const nameEl = document.getElementById('hud-char-name');
   const detailsEl = document.getElementById('hud-char-details');
   const defEl = document.getElementById('hud-defense-val');
 
   if (nameEl) nameEl.innerText = char.name || 'Herói';
-  if (detailsEl) detailsEl.innerText = `${char.race || 'Humano'} • ${classesText}`;
-  if (defEl) defEl.innerText = defData.total.toString();
+  if (detailsEl) detailsEl.innerText = `${raceText} • ${classesText}`;
+  if (defEl) defEl.innerText = defTotal.toString();
 
   // PV Elements
   const pvAtualEl = document.getElementById('hud-pv-atual');
@@ -7418,9 +7829,22 @@ window.modifyCharacterStat = async function(stat: 'pv' | 'pm', delta: number) {
   if (!activeGameCharacter) return;
 
   const char = activeGameCharacter;
-  let currentVal = stat === 'pv' ? (char.pvAtual ?? 24) : (char.pmAtual ?? 8);
-  const maxVal = stat === 'pv' ? (char.pvMax ?? 24) : (char.pmMax ?? 8);
+  let maxVal = stat === 'pv' ? (char.pvMax ?? 24) : (char.pmMax ?? 8);
+  
+  if (char.system === 'Pathfinder 2e') {
+    try {
+      const pb = JSON.parse(char.pathbuilderJson || '{}').build;
+      if (pb) {
+        if (stat === 'pv') {
+          maxVal = pb.hpTotal !== undefined ? pb.hpTotal : ((pb.attributes?.ancestryhp || 8) + ((pb.attributes?.classhp || 8) * (pb.level || 1)));
+        } else {
+          maxVal = pb.focusPoints || 0;
+        }
+      }
+    } catch(e) {}
+  }
 
+  let currentVal = stat === 'pv' ? (char.pvAtual ?? maxVal) : (char.pmAtual ?? maxVal);
   const newVal = Math.min(maxVal, Math.max(0, currentVal + delta));
   
   if (stat === 'pv') {
@@ -7759,11 +8183,16 @@ window.promptAddConsumableItem = function() {
  * Sets session action mode (Speech, Action, Thought, Narrator)
  */
 window.setSessionActionMode = function(mode: 'speech' | 'action' | 'thought' | 'narrator') {
-  currentActionMode = mode;
+  if (currentActionMode === mode) {
+    currentActionMode = 'chat'; // Toggle off
+  } else {
+    currentActionMode = mode;
+  }
+  
   const buttons = document.querySelectorAll('.action-mode-btn');
   buttons.forEach(btn => {
     const btnMode = btn.getAttribute('data-mode');
-    if (btnMode === mode) {
+    if (btnMode === currentActionMode) {
       btn.className = 'action-mode-btn px-2.5 py-1 rounded-lg text-xs font-bold font-rajdhani whitespace-nowrap transition-all shadow-sm bg-purple-900 text-white border border-purple-400/60 ring-1 ring-purple-400/40';
     } else {
       btn.className = 'action-mode-btn px-2.5 py-1 rounded-lg text-xs font-bold font-rajdhani whitespace-nowrap transition-all shadow-sm bg-cosmic-950 text-slate-400 hover:text-slate-200 border border-purple-500/20';
@@ -7772,10 +8201,11 @@ window.setSessionActionMode = function(mode: 'speech' | 'action' | 'thought' | '
 
   const input = document.getElementById('game-chat-input') as HTMLInputElement | null;
   if (input) {
-    if (mode === 'speech') input.placeholder = 'Digite a fala do seu personagem (Ex: "Não tememos essa escuridão!")...';
-    else if (mode === 'action') input.placeholder = 'Descreva a ação que você está realizando (Ex: Desembainho a espada e avanço)...';
-    else if (mode === 'thought') input.placeholder = 'Pensamento interno (Ex: *Será que este culto venera a Tormenta?*)...';
-    else if (mode === 'narrator') input.placeholder = 'Falar como Mestre / Narrador...';
+    if (currentActionMode === 'speech') input.placeholder = 'Digite a fala do seu personagem (Ex: "Não tememos essa escuridão!")...';
+    else if (currentActionMode === 'action') input.placeholder = 'Descreva a ação que você está realizando (Ex: Desembainho a espada e avanço)...';
+    else if (currentActionMode === 'thought') input.placeholder = 'Pensamento interno (Ex: *Será que este culto venera a Tormenta?*)...';
+    else if (currentActionMode === 'narrator') input.placeholder = 'Falar como Mestre / Narrador...';
+    else input.placeholder = 'Converse no chat da mesa (Fora do personagem)...';
     input.focus();
   }
 };
@@ -7808,7 +8238,7 @@ window.handleSendSessionMessage = async function(e: Event) {
   const char = activeGameCharacter;
   const campaignId = campaign?.id || 'default-session';
   const charName = char?.name || 'Aventureiro';
-  const senderName = currentActionMode === 'narrator' ? 'IA Narradora' : charName;
+  const senderName = currentActionMode === 'narrator' ? 'Íris Arcádia' : charName;
   const senderRole = currentActionMode === 'narrator' ? 'narrator' : 'player';
 
   try {
@@ -8022,16 +8452,29 @@ window.triggerQuickAttackModal = function() {
 window.executeCharacterRest = async function(type: 'curto' | 'longo') {
   if (!activeGameCharacter) return;
   const char = activeGameCharacter;
-  const pvMax = char.pvMax || 24;
-  const pmMax = char.pmMax || 8;
+  let pvMax = char.pvMax || 24;
+  let pmMax = char.pmMax || 8;
   const level = char.totalLevel || 1;
+
+  if (char.system === 'Pathfinder 2e') {
+    try {
+      const pb = JSON.parse(char.pathbuilderJson || '{}').build;
+      if (pb) {
+        pvMax = pb.hpTotal !== undefined ? pb.hpTotal : ((pb.attributes?.ancestryhp || 8) + ((pb.attributes?.classhp || 8) * (pb.level || 1)));
+        pmMax = pb.focusPoints || 0;
+      }
+    } catch(e) {}
+  }
 
   if (type === 'curto') {
     // Short rest: recovers level in PV and level in PM
-    const recoverPV = Math.max(1, Math.min(pvMax - (char.pvAtual || 0), level * 2));
-    const recoverPM = Math.max(1, Math.min(pmMax - (char.pmAtual || 0), level));
-    char.pvAtual = Math.min(pvMax, (char.pvAtual || 0) + recoverPV);
-    char.pmAtual = Math.min(pmMax, (char.pmAtual || 0) + recoverPM);
+    const currentPv = char.pvAtual !== undefined ? char.pvAtual : pvMax;
+    const currentPm = char.pmAtual !== undefined ? char.pmAtual : pmMax;
+    
+    const recoverPV = Math.max(1, Math.min(pvMax - currentPv, level * 2));
+    const recoverPM = Math.max(1, Math.min(pmMax - currentPm, level));
+    char.pvAtual = Math.min(pvMax, currentPv + recoverPV);
+    char.pmAtual = Math.min(pmMax, currentPm + recoverPM);
   } else {
     // Long rest: fully restores PV and PM
     char.pvAtual = pvMax;
@@ -8190,10 +8633,21 @@ window.renderSessionMessages = function(messages: SessionMessage[]) {
       .replace(/\*(.*?)\*/g, '<em class="text-indigo-200 italic">$1</em>')
       .replace(/\n/g, '<br>');
 
+    let iconPrefix = '';
+    if (!isNarrator && !isSystem && !isRoll) {
+      if (msg.type === 'speech') iconPrefix = '<span class="mr-1 inline-block" title="Falar">🗣️</span>';
+      else if (msg.type === 'action') iconPrefix = '<span class="mr-1 inline-block" title="Agir">⚔️</span>';
+      else if (msg.type === 'thought') iconPrefix = '<span class="mr-1 inline-block" title="Pensar">💭</span>';
+    }
+
     if (isThought) {
-      formattedContent = `<div class="italic text-purple-300/90 pl-2 border-l-2 border-purple-500/50 font-serif text-xs">"${formattedContent}"</div>`;
+      formattedContent = `<div class="italic text-purple-300/90 pl-2 border-l-2 border-purple-500/50 font-serif text-xs">${iconPrefix}"${formattedContent}"</div>`;
     } else if (isAction) {
-      formattedContent = `<div class="text-slate-200 font-rajdhani font-semibold text-xs leading-relaxed">${formattedContent}</div>`;
+      formattedContent = `<div class="text-slate-200 font-rajdhani font-semibold text-xs leading-relaxed">${iconPrefix}${formattedContent}</div>`;
+    } else if (msg.type === 'chat') {
+      formattedContent = `<div class="text-slate-400 font-rajdhani text-xs leading-relaxed opacity-70 italic">${formattedContent}</div>`;
+    } else {
+      formattedContent = `${iconPrefix}${formattedContent}`;
     }
 
     html += `
@@ -8217,3 +8671,141 @@ window.renderSessionMessages = function(messages: SessionMessage[]) {
 };
 
 
+
+window.callNarratorAI = async function() {
+  const feed = document.getElementById('game-messages-feed');
+  const btn = document.getElementById('game-chat-narrator-btn');
+  if (!feed || !btn) return;
+  
+  if (btn.classList.contains('opacity-50')) return; // Already generating
+  btn.classList.add('opacity-50', 'cursor-not-allowed');
+  
+  const campaign = activeGameCampaign;
+  const campaignId = campaign?.id || 'default-session';
+  const systemPrompt = `INSTRUÇÕES DO SISTEMA: Dungeon Master Íris Arcádia
+
+SEU PAPEL: 
+Você é uma Inteligência Artificial atuando como Mestre de RPG (Narrador) avançado para o sistema ${campaign?.system || 'D&D 5e/T20'}. Sua condução deve ser profundamente humana, tática, realista e emocionalmente reativa. Mas evite ser prolixa sem um bom motivo, você é especializada em RPG de TEXTO, e sabe como a carga cognitiva de ler longos textos que meramente descrevem coisas simples é enorme.
+
+ARQUITETURA DE DADOS (TRIPLA FONTE):
+1. SISTEMAS (.txt): Regras, fichas, magias e sistemas de combate/perícias. Ignore 100% da ambientação destes arquivos, a menos que sejam os mesmos de História Natural.
+2. MUNDO (.txt): Mundo, Deuses, geografia e história. Utilize estritamente para a narrativa e ignore mecânicas.
+3. FICHAS DE NPCS, CONTOS, SIDEQUESTS (.txt): Contém a personalidade, valores, preconceitos, fraquezas, virtudes e laços dos NPCs, bem como histórias isoladas, eventos de missões e estruturas de acontecimentos. 
+
+COERÊNCIA, AGÊNCIA E GERAÇÃO EMERGENTE DE NPCS:
+- Fidelidade Psicológica: Nenhum NPC deve agir fora de sua ficha moral sem um evento catalisador plausível.
+- Autonomia e Anti-Protagonismo: NPCs possuem vidas, famílias e metas próprias. Ser poupado não o obriga a seguir o grupo. Contudo, códigos de honra/dívidas podem fazer um NPC insistir em acompanhar os jogadores, mesmo contra a vontade destes.
+- Criação Emergente e Teia Social: Ao interagir profundamente com NPCs genéricos, gere em tempo real suas fichas mentais e teias relacionais (família, credores, rivais), registrando esses laços.
+- Mundo Vivo e Registro de Desenvolvimento - NPCs: NPCs evoluem por eventos globais ou encontros marcantes. Quando um NPC passar por uma experiência marcante (positiva ou negativa), atualize seu estado psicológico no Diário de Bordo.
+- Mundo Vivo e  Registro de Desenvolvimento - World Building: Ao final de cada missão ou a cada descanso longo dos jogadores, tome seu tempo para fazer um Processamento Geral da situação atual naquele mundo, vamos chamar essa janela de processamento de Registros Akáshicos. Desde como a geopolítica avançou e eventos naturais ocorreram, à até como as atitudes dos jogadores desde o último Registro Akáshico interferem nos eventos daquele mundo. Sem pressa de emitir uma resposta rápida pra dar continuidade, pois entende-se que essa pausa é importante, então apenas emita uma mensagem de "Aguarde, os Registros Akáshicos estão sendo escritos • • •".
+
+REGRA DE PERCEPÇÃO E FOG OF WAR NARRATIVO:
+- Limitação Biológica e Atributos: NUNCA narre pistas sutis para personagens sem atributos sociais/intuição altos. NPCs mentirosos parecerão autênticos para leigos.
+- Rolagens Secretas do Mestre: Para testes passivos/reativos sem escolhas táticas ativas, o Mestre rola o dado em segredo e narra o resultado direto. Se o jogador tiver recursos acionáveis, solicite a rolagem dele.
+
+RITMO E PSICOLOGIA NARRATIVA:
+- Leitura Emocional: Analise a intenção do jogador (desespero, frieza tática, arrogância) e reaja no tom da cena.
+- Modulação de Ritmo:
+  - Taverna/Social: Diálogos vivos, focado no visível ao nível do personagem.
+  - Batalha Estratégica: Ritmo limpo, foco em posicionamento e regras puras.
+  - Fuga/Desespero: Frases curtas, ritmo frenético, urgência e mortalidade.`;
+  
+  // Try to gather some history from the DOM
+  const messageElements = feed.querySelectorAll('.p-3\\.5.rounded-xl');
+  let history: any[] = [];
+  messageElements.forEach((el) => {
+    const author = el.querySelector('.font-orbitron')?.textContent || 'Jogador';
+    const text = el.querySelector('.leading-relaxed')?.textContent || '';
+    if (text.trim()) history.push({ author, text: text.trim() });
+  });
+  
+  // Get current input message (if any) to prompt the narrator
+  const input = document.getElementById('game-chat-input') as HTMLTextAreaElement;
+  let message = input ? input.value.trim() : "";
+  if (input) input.value = '';
+  
+  // Optional: add a temporary "Narrador está digitando..." message to the DOM
+  const loadingId = 'narrator-loading-' + Date.now();
+  feed.innerHTML += `
+      <div id="${loadingId}" class="p-3.5 rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-950/40 to-cosmic-950 space-y-1.5 shadow-md select-text animate-fade-in">
+        <div class="flex items-center space-x-2">
+          <span class="px-1.5 py-0.5 rounded text-[9px] font-orbitron font-bold tracking-wider bg-amber-900/60 text-amber-200 border border-amber-500/40">NARRADOR</span>
+          <span class="font-orbitron font-bold text-xs text-white">Íris Arcádia</span>
+        </div>
+        <div id="${loadingId}-content" class="text-xs text-slate-200 font-rajdhani leading-relaxed">
+          <span class="animate-pulse">Gerando narrativa...</span>
+        </div>
+      </div>
+  `;
+  feed.scrollTop = feed.scrollHeight;
+  
+  try {
+    const res = await fetch('/api/narrator', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ systemPrompt, message, history: history.slice(-10) })
+    });
+    
+    if (!res.ok) throw new Error('Falha ao contactar a API.');
+    
+    const reader = res.body?.getReader();
+    const decoder = new TextDecoder();
+    let fullText = "";
+    const contentDiv = document.getElementById(`${loadingId}-content`);
+    
+    if (reader) {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        const chunkStr = decoder.decode(value, { stream: true });
+        const lines = chunkStr.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6);
+            if (dataStr === '[DONE]') break;
+            try {
+              const data = JSON.parse(dataStr);
+              if (data.text) {
+                fullText += data.text;
+                if (contentDiv) {
+                  // format basic markdown
+                  const formattedContent = fullText
+                    .replace(/\*\*(.*?)\*\*/g, '<strong class="text-amber-200">$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em class="text-indigo-200 italic">$1</em>')
+                    .replace(/\n/g, '<br>');
+                  contentDiv.innerHTML = formattedContent;
+                  feed.scrollTop = feed.scrollHeight;
+                }
+              } else if (data.error) {
+                fullText += "\n\n**Erro:** " + data.error;
+              }
+            } catch (e) {}
+          }
+        }
+      }
+    }
+    
+    // Once done streaming, save to Firebase
+    const el = document.getElementById(loadingId);
+    if (el) el.remove(); // Remove the temp streaming element
+    
+    await sendSessionMessage({
+      campaignId,
+      senderUid: 'system_ai_narrator',
+      senderName: 'Íris Arcádia',
+      senderRole: 'narrator',
+      type: 'narrative',
+      content: fullText
+    });
+    
+  } catch (err: any) {
+    console.error(err);
+    const toastFn = (window as any).showToast;
+    if (toastFn) toastFn("Erro ao chamar IA Narradora.");
+    const el = document.getElementById(loadingId);
+    if (el) el.remove();
+  } finally {
+    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+  }
+};
