@@ -2,6 +2,7 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 
 
 (window as any).db = db;
+(window as any).saveCharacter = saveCharacter;
 (window as any).doc = doc;
 (window as any).setDoc = setDoc;
 
@@ -326,7 +327,7 @@ export function getRoleBadgeHtml(role: string, isMe = false, paddingX = 'px-1.5'
  */
 function updateAppUIWithProfile(profile: UserProfileData | null, gUser: any | null) {
   (window as any).updateAppUIWithProfile = updateAppUIWithProfile;
-  const username = profile?.username || 'Aguardando para encarnar...';
+  const username = profile?.username || (gUser ? (gUser.displayName || 'Jogador') : 'Aguardando para encarnar...');
   const email = profile?.email || gUser?.email || 'No momento você é esse bostinha acima aguardando para começar a existir...';
   const photo = profile?.photoURL || gUser?.photoURL || 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif';
   const role = profile?.role || (gUser ? 'PLAYER' : 'CONVIDADO');
@@ -334,6 +335,7 @@ function updateAppUIWithProfile(profile: UserProfileData | null, gUser: any | nu
   // Window references
   window.currentUserProfile = profile;
   window.currentGoogleUser = gUser;
+  if (gUser && (window as any).loadChatbotMemory) { (window as any).loadChatbotMemory(gUser.uid); }
 
   // Header Elements
   const headerName = document.getElementById('header-username');

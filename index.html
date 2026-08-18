@@ -1731,7 +1731,7 @@
         </div>
 
         <div class="flex items-center space-x-2">
-          <button onclick="showToast('Acessando memória de preferências...')" class="btn-slate-cosmic px-3 py-1.5 rounded-lg text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+          <button onclick="openModal('chatbot-memory-modal')" class="btn-slate-cosmic px-3 py-1.5 rounded-lg text-xs font-bold text-slate-200 flex items-center space-x-1.5">
             <span>🧠 Memória</span>
           </button>
           <button onclick="closeModal('chatbot-modal')" class="text-slate-400 hover:text-white p-1">
@@ -1776,7 +1776,7 @@
           <div class="text-right">
             <div class="flex items-center justify-end space-x-2 mb-1">
               <span class="font-bold text-purple-200 font-rajdhani">testador</span>
-              <span class="bg-purple-950 text-purple-300 border border-purple-500/40 text-[9px] font-bold font-orbitron px-1.5 py-0.2 rounded">JOGADOR</span>
+              <span class="bg-purple-950 text-purple-300 border border-purple-500/40 text-[9px] font-bold font-orbitron px-1.5 py-0.2 rounded">PLAYER</span>
               <span class="text-[10px] text-slate-500">12:26</span>
             </div>
             <div class="bg-purple-900/50 border border-purple-500/40 p-3 rounded-2xl max-w-md text-white text-left">
@@ -1805,7 +1805,7 @@
           <div class="text-right">
             <div class="flex items-center justify-end space-x-2 mb-1">
               <span class="font-bold text-purple-200 font-rajdhani">testador</span>
-              <span class="bg-purple-950 text-purple-300 border border-purple-500/40 text-[9px] font-bold font-orbitron px-1.5 py-0.2 rounded">JOGADOR</span>
+              <span class="bg-purple-950 text-purple-300 border border-purple-500/40 text-[9px] font-bold font-orbitron px-1.5 py-0.2 rounded">PLAYER</span>
               <span class="text-[10px] text-slate-500">12:26</span>
             </div>
             <div class="bg-purple-900/50 border border-purple-500/40 p-3 rounded-2xl max-w-md text-white text-left">
@@ -1829,6 +1829,13 @@
           </div>
         </div>
 
+      </div>
+
+      <!-- Suggestions Bar -->
+      <div class="px-4 py-2 bg-cosmic-950/80 border-t border-purple-500/20 flex items-center space-x-2 overflow-x-auto hide-scrollbar">
+         <button onclick="document.getElementById('chatbot-input').value = 'Aurora, me ajude a criar uma ficha de personagem nova!'; handleSendChatbot(new Event('submit'))" class="shrink-0 bg-emerald-950/30 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-900/50 px-3 py-1.5 rounded-full text-xs font-orbitron font-bold flex items-center space-x-1.5 transition-colors">
+            <span>✨ CRIAR FICHA COM A AURORA</span>
+         </button>
       </div>
 
       <!-- Chatbot Input Bar -->
@@ -4037,28 +4044,28 @@
       // Header
       const headerName = document.getElementById('header-username');
       const headerAvatar = document.getElementById('header-avatar-img');
-      if (headerName) headerName.innerText = playerProfile.name;
-      if (headerAvatar) headerAvatar.src = playerProfile.avatarUrl;
+      if (headerName) headerName.innerText = (window.currentGoogleUser ? (window.currentGoogleUser.displayName || 'Jogador') : 'Aguardando para encarnar...');
+      if (headerAvatar) headerAvatar.src = (window.currentGoogleUser ? window.currentGoogleUser.photoURL : 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif');
 
       // Sidebar
       const sidebarName = document.getElementById('sidebar-username');
       const sidebarAvatar = document.getElementById('sidebar-avatar-img');
-      if (sidebarName) sidebarName.innerText = playerProfile.name;
-      if (sidebarAvatar) sidebarAvatar.src = playerProfile.avatarUrl;
+      if (sidebarName) sidebarName.innerText = (window.currentGoogleUser ? (window.currentGoogleUser.displayName || 'Jogador') : 'Aguardando para encarnar...');
+      if (sidebarAvatar) sidebarAvatar.src = (window.currentGoogleUser ? window.currentGoogleUser.photoURL : 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif');
 
       // Account Modal
       const modalName = document.getElementById('modal-account-username');
       const modalAvatar = document.getElementById('modal-account-avatar-img');
       const modalEmail = document.getElementById('modal-account-email');
-      if (modalName) modalName.innerText = playerProfile.name;
-      if (modalAvatar) modalAvatar.src = playerProfile.avatarUrl;
+      if (modalName) modalName.innerText = (window.currentGoogleUser ? (window.currentGoogleUser.displayName || 'Jogador') : 'Aguardando para encarnar...');
+      if (modalAvatar) modalAvatar.src = (window.currentGoogleUser ? window.currentGoogleUser.photoURL : 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif');
       if (modalEmail) modalEmail.innerText = playerProfile.email;
 
       // Options Modal
       const optName = document.getElementById('options-preview-username');
       const optAvatar = document.getElementById('options-preview-avatar');
-      if (optName) optName.innerText = playerProfile.name;
-      if (optAvatar) optAvatar.src = playerProfile.avatarUrl;
+      if (optName) optName.innerText = (window.currentGoogleUser ? (window.currentGoogleUser.displayName || 'Jogador') : 'Aguardando para encarnar...');
+      if (optAvatar) optAvatar.src = (window.currentGoogleUser ? window.currentGoogleUser.photoURL : 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif');
     }
 
 async function saveProfileOptions() {
@@ -4335,11 +4342,11 @@ async function saveProfileOptions() {
       const text = input.value.trim();
       if (!text) return;
 
-      const activeName = window.currentUserProfile?.username || playerProfile.name;
-      const activePhoto = window.currentUserProfile?.photoURL || playerProfile.avatarUrl;
+      const activeName = window.currentUserProfile?.username || (window.currentGoogleUser ? (window.currentGoogleUser.displayName || 'Jogador') : 'Aguardando para encarnar...');
+      const activePhoto = window.currentUserProfile?.photoURL || (window.currentGoogleUser ? window.currentGoogleUser.photoURL : 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif');
 
-      const activeRole = window.currentUserProfile?.role || 'JOGADOR';
-      const roleBadge = window.getRoleBadgeHtml ? window.getRoleBadgeHtml(activeRole, false, 'px-1.5', 'py-0.2') : '<span class="bg-purple-950 text-purple-300 border border-purple-500/40 text-[9px] font-bold font-orbitron px-1.5 py-0.2 rounded">JOGADOR</span>';
+      const activeRole = window.currentUserProfile?.role || (window.currentGoogleUser ? 'PLAYER' : 'CONVIDADO');
+      const roleBadge = window.getRoleBadgeHtml ? window.getRoleBadgeHtml(activeRole, false, 'px-1.5', 'py-0.2') : '<span class="bg-purple-950 text-purple-300 border border-purple-500/40 text-[9px] font-bold font-orbitron px-1.5 py-0.2 rounded">CONVIDADO</span>';
 
       const canDelete = activeRole === 'OWNER' || activeRole === 'ADM';
       const deleteBtn = canDelete ? `<button onclick="this.closest('.flex').remove()" class="text-slate-500 hover:text-red-400 p-1 rounded hover:bg-red-950/30 transition-colors ml-2" title="Excluir"><svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg></button>` : '';
@@ -4413,6 +4420,42 @@ async function saveProfileOptions() {
       }
     }
 
+    
+    let userChatbotMemory = "";
+
+    window.saveChatbotMemory = async function() {
+      const input = document.getElementById('chatbot-memory-input');
+      const val = input.value.trim();
+      userChatbotMemory = val;
+      
+      if (window.currentGoogleUser && window.db && window.doc && window.setDoc) {
+        try {
+          const userRef = window.doc(window.db, 'users', window.currentGoogleUser.uid);
+          await window.setDoc(userRef, { chatbotMemory: val }, { merge: true });
+          showToast("Memória salva na nuvem com sucesso!", "success");
+        } catch (e) {
+          showToast("Salvo apenas localmente (erro no banco).", "warning");
+        }
+      } else {
+        showToast("Memória salva localmente (faça login para sincronizar).", "info");
+      }
+      closeModal('chatbot-memory-modal');
+    };
+
+    window.loadChatbotMemory = async function(uid) {
+      if (window.db && window.getDoc && window.doc) {
+        const docSnap = await window.getDoc(window.doc(window.db, 'users', uid));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.chatbotMemory) {
+            userChatbotMemory = data.chatbotMemory;
+            const input = document.getElementById('chatbot-memory-input');
+            if (input) input.value = userChatbotMemory;
+          }
+        }
+      }
+    };
+
     // Chatbot Íris & Aurora Sending
     function handleSendChatbot(e) {
       e.preventDefault();
@@ -4420,11 +4463,11 @@ async function saveProfileOptions() {
       const text = input.value.trim();
       if (!text) return;
 
-      const activeName = window.currentUserProfile?.username || playerProfile.name;
-      const activePhoto = window.currentUserProfile?.photoURL || playerProfile.avatarUrl;
+      const activeName = window.currentUserProfile?.username || (window.currentGoogleUser ? (window.currentGoogleUser.displayName || 'Jogador') : 'Aguardando para encarnar...');
+      const activePhoto = window.currentUserProfile?.photoURL || (window.currentGoogleUser ? window.currentGoogleUser.photoURL : 'https://assets-v2.lottiefiles.com/a/2c79e772-1181-11ee-a2d8-83ae705f2af6/YOgxHDDL2U.gif');
 
-      const activeRole = window.currentUserProfile?.role || 'JOGADOR';
-      const roleBadge = window.getRoleBadgeHtml ? window.getRoleBadgeHtml(activeRole, false, 'px-1.5', 'py-0.2') : '<span class="bg-purple-950 text-purple-300 border border-purple-500/40 text-[9px] font-bold font-orbitron px-1.5 py-0.2 rounded">JOGADOR</span>';
+      const activeRole = window.currentUserProfile?.role || (window.currentGoogleUser ? 'PLAYER' : 'CONVIDADO');
+      const roleBadge = window.getRoleBadgeHtml ? window.getRoleBadgeHtml(activeRole, false, 'px-1.5', 'py-0.2') : '<span class="bg-purple-950 text-purple-300 border border-purple-500/40 text-[9px] font-bold font-orbitron px-1.5 py-0.2 rounded">CONVIDADO</span>';
 
       const canDelete = activeRole === 'OWNER' || activeRole === 'ADM';
       const deleteBtn = canDelete ? `<button onclick="this.closest('.flex').remove()" class="text-slate-500 hover:text-red-400 p-1 rounded hover:bg-red-950/30 transition-colors ml-2" title="Excluir"><svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg></button>` : '';
@@ -4452,53 +4495,126 @@ async function saveProfileOptions() {
       feed.scrollTop = feed.scrollHeight;
       input.value = '';
 
-      // Generate AI Response (Íris or Aurora based on prompt keywords)
-      setTimeout(() => {
-        const lower = text.toLowerCase();
-        const isAurora = lower.includes('regra') || lower.includes('dado') || lower.includes('mecanica') || lower.includes('aurora') || lower.includes('combate');
+// Real AI Chatbot integration
+      window.chatbotHistory = window.chatbotHistory || [];
+      const historyCopy = [...window.chatbotHistory];
+      window.chatbotHistory.push({ role: 'user', text });
 
-        const replyDiv = document.createElement('div');
-        replyDiv.className = 'flex items-start space-x-3';
+      const replyDiv = document.createElement('div');
+      replyDiv.className = 'flex items-start space-x-3 mt-4';
+      
+      const isAurora = text.toLowerCase().includes('aurora') || text.toLowerCase().includes('ficha') || text.toLowerCase().includes('regra');
+      const auroraDefault = 'https://i.pinimg.com/1200x/29/79/11/2979116e033deea5086d790401889aeb.jpg';
+      const irisDefault = 'https://i.pinimg.com/1200x/57/40/f4/5740f4236bd1e97669d0ce468494b8e2.jpg';
+      const avatarSrc = isAurora ? (window.globalAiConfig?.auroraAvatar || auroraDefault) : (window.globalAiConfig?.irisAvatar || irisDefault);
+      const aiName = isAurora ? 'Aurora' : 'Íris Arcádia';
+      const aiBadge = isAurora ? '<span class="bg-[#0a1a10] text-[#3DC788] border border-[#3DC788] shadow-[0_0_5px_rgba(61,199,136,0.5)] text-[9px] font-bold font-orbitron px-1.5 py-0.2 rounded">IA MEDIADORA</span>' : '<span class="bg-purple-900 text-red-500 border border-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)] text-[9px] font-bold font-orbitron px-1.5 py-0.2 rounded">IA NARRADORA</span>';
+      const borderColor = isAurora ? 'border-[#3DC788]' : 'border-red-500';
+      const shadowColor = isAurora ? 'shadow-[0_0_5px_rgba(61,199,136,0.5)]' : 'shadow-[0_0_5px_rgba(239,68,68,0.5)]';
+      const textClass = isAurora ? 'text-[#3DC788]' : 'text-white';
+      const bgClass = isAurora ? 'bg-gradient-to-r from-[#0a1a10] via-[#050d08] to-[#0a1a10] border-[#3DC788]/50 shadow-[0_0_8px_rgba(61,199,136,0.2)]' : 'bg-gradient-to-r from-[#170a2c] via-[#100720] to-[#170a2c] border-purple-500/50 shadow-neon-purple';
 
-        if (isAurora) {
-          replyDiv.innerHTML = `
-            <img src="${window.globalAiConfig ? window.globalAiConfig.auroraAvatar : 'https://i.pinimg.com/736x/8c/fb/f0/8cfbf0f1c34a2e5d59046c3b6920f781.jpg'}" class="w-8 h-8 rounded-full object-cover border border-[#3DC788] shadow-[0_0_5px_rgba(61,199,136,0.5)] shrink-0 aurora-avatar-img">
-            <div>
-              <div class="flex items-center space-x-2 mb-1">
-                <span class="bg-[#0a1a10] text-[#3DC788] border border-[#3DC788] shadow-[0_0_5px_rgba(61,199,136,0.5)] text-[9px] font-bold font-orbitron px-1.5 py-0.2 rounded">IA MEDIADORA</span>
-                <span class="font-bold text-[#3DC788] font-rajdhani">Aurora</span>
-                <div class="flex items-center">
-                  <span class="text-[10px] text-slate-500">Agora</span>
-                  <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center">${deleteBtn}</div>
-                </div>
-              </div>
-              <div class="bg-gradient-to-r from-[#0a1a10] via-[#050d08] to-[#0a1a10] border border-[#3DC788]/50 shadow-[0_0_8px_rgba(61,199,136,0.2)] p-3 rounded-2xl max-w-lg text-slate-200 leading-relaxed">
-                Entendido. Analisando as regras para '${escapeHtml(text)}': Recomendo aplicar o modificador de atributo base e verificar o limite de carga antes do próximo turno.
-              </div>
+      replyDiv.innerHTML = `
+        <img src="${avatarSrc}" class="w-8 h-8 rounded-full object-cover border ${borderColor} ${shadowColor} shrink-0">
+        <div class="w-full">
+          <div class="flex items-center space-x-2 mb-1">
+            ${aiBadge}
+            <span class="font-bold ${textClass} font-rajdhani">${aiName}</span>
+            <div class="flex items-center">
+              <span class="text-[10px] text-slate-500">Agora</span>
             </div>
-          `;
-        } else {
-          replyDiv.innerHTML = `
-            <img src="${window.globalAiConfig ? window.globalAiConfig.irisAvatar : 'https://i.pinimg.com/736x/88/f2/e8/88f2e825cd40939eb5110d195a6ecae4.jpg'}" class="w-8 h-8 rounded-full object-cover border border-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)] shrink-0 iris-avatar-img">
-            <div>
-              <div class="flex items-center space-x-2 mb-1">
-                <span class="bg-purple-900 text-red-500 border border-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)] text-[9px] font-bold font-orbitron px-1.5 py-0.2 rounded">IA NARRADORA</span>
-                <span class="font-bold text-white font-rajdhani">Íris Arcádia</span>
-                <div class="flex items-center">
-                  <span class="text-[10px] text-slate-500">Agora</span>
-                  <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center">${deleteBtn}</div>
-                </div>
-              </div>
-              <div class="bg-gradient-to-r from-[#170a2c] via-[#100720] to-[#170a2c] border border-purple-500/50 shadow-neon-purple p-3 rounded-2xl max-w-lg text-slate-200 leading-relaxed">
-                As estrelas murmuram sobre '${escapeHtml(text)}'... Que os ventos das nebulosas guiem seus passos através desta nova jornada!
-              </div>
-            </div>
-          `;
+          </div>
+          <div class="message-content ${bgClass} border p-3 rounded-2xl w-full max-w-lg text-slate-200 leading-relaxed text-xs">
+            <span class="animate-pulse">Gerando resposta...</span>
+          </div>
+        </div>
+      `;
+      feed.appendChild(replyDiv);
+      feed.scrollTop = feed.scrollHeight;
+
+      fetch('/api/chatbot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, history: historyCopy, isAurora: isAurora, userMemory: userChatbotMemory })
+      }).then(async (res) => {
+        const reader = res.body?.getReader();
+        const decoder = new TextDecoder();
+        let fullText = "";
+        const contentDiv = replyDiv.querySelector('.message-content');
+        contentDiv.innerHTML = "";
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n\n');
+          for (let line of lines) {
+            if (line.startsWith('data: ')) {
+               try {
+                  const data = JSON.parse(line.substring(6));
+                  if (data.text) {
+                     fullText += data.text;
+                     contentDiv.innerHTML = parseChatbotResponse(fullText);
+                     feed.scrollTop = feed.scrollHeight;
+                  }
+               } catch(e) {}
+            }
+          }
         }
+        window.chatbotHistory.push({ role: 'model', text: fullText });
+      }).catch(err => {
+        const contentDiv = replyDiv.querySelector('.message-content');
+        contentDiv.innerHTML = "Erro ao contactar a IA.";
+      });
+    }
 
-        feed.appendChild(replyDiv);
-        feed.scrollTop = feed.scrollHeight;
-      }, 1000);
+function parseChatbotResponse(text) {
+       let html = escapeHtml(text);
+       const jsonMatch = text.match(/```json([\s\S]*?)```/);
+       if (jsonMatch) {
+          try {
+             const charData = JSON.parse(jsonMatch[1].trim());
+             html = html.replace(/```json[\s\S]*?```/, '');
+             html = html.replace(/\n/g, '<br>');
+             
+             const charId = "char_" + Date.now();
+             window[charId] = charData;
+             html += `
+             <div class="mt-4 p-3 bg-cosmic-950/50 border border-emerald-500/30 rounded-xl">
+               <h4 class="text-emerald-400 font-orbitron font-bold text-sm mb-2">✨ Ficha de ${charData.name || 'Personagem'} Pronta!</h4>
+               <p class="text-xs text-slate-300 mb-3">Classe: ${charData.class1 || 'N/A'} | Raça: ${charData.race || 'N/A'}</p>
+               <button onclick="importChatbotCharacter('${charId}')" class="w-full btn-emerald-neon text-white font-bold py-2 rounded-lg text-xs hover:scale-105 transition-transform">
+                 📥 IMPORTAR PARA MINHA CONTA
+               </button>
+             </div>
+             `;
+             return html;
+          } catch(e) {}
+       }
+       return html.replace(/\n/g, '<br>');
+    }
+
+    
+    window.importChatbotCharacter = async function(varName) {
+       const charData = window[varName];
+       if (!charData) return;
+       if (!window.currentGoogleUser) {
+          showToast("Faça login com Google para salvar a ficha!", "error");
+          return;
+       }
+       showToast("Salvando ficha no Firebase...", "info");
+       try {
+          if (window.saveCharacter) {
+             const newId = await window.saveCharacter(charData, window.currentGoogleUser.uid);
+             showToast("Ficha salva com sucesso! ID: " + newId, "success");
+             // Refresh characters list
+             if (window.loadMyCharacters) window.loadMyCharacters();
+          } else {
+             showToast("Módulo de banco de dados não carregado.", "error");
+          }
+       } catch(e) {
+          showToast("Erro ao salvar: " + e.message, "error");
+       }
     }
 
     function escapeHtml(str) {
